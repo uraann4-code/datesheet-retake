@@ -10,6 +10,7 @@ export interface Course {
   subject: string;
   students: Set<string>;
   teacherName: string;
+  isMS?: boolean;
 }
 
 export interface ScheduledCourse extends Course {
@@ -45,6 +46,7 @@ export function generateSchedule(
   const courseCodeKey = findKey(['coursecode', 'subjectcode']) || findKey(['course']);
   const subjectKey = findKey(['subject', 'coursename', 'coursetitle']);
   const teacherKey = findKey(['teacher', 'instructor', 'faculty']);
+  const programKey = findKey(['program', 'degree', 'class', 'department']);
 
   // 2. Extract unique courses and their students
   const coursesMap = new Map<string, Course>();
@@ -56,12 +58,14 @@ export function generateSchedule(
     let courseCode = courseCodeKey ? String(record[courseCodeKey] || '').trim() : '';
     const subject = subjectKey ? String(record[subjectKey] || '').trim() : '';
     const teacherName = teacherKey ? String(record[teacherKey] || '').trim() : '';
+    const program = programKey ? String(record[programKey] || '').trim() : '';
 
     if (!courseCode && subject) {
       courseCode = subject;
     }
 
     const normalizedCourseCode = courseCode.toUpperCase();
+    const isMS = /\b(MS|MBA|MPhil|Masters?)\b/i.test(program) || /MS\s*\(/.test(program);
 
     return {
       original: record,
@@ -69,7 +73,8 @@ export function generateSchedule(
       courseCode: normalizedCourseCode,
       originalCourseCode: courseCode,
       subject,
-      teacherName
+      teacherName,
+      isMS
     };
   });
 
@@ -82,7 +87,10 @@ export function generateSchedule(
         subject: record.subject || record.originalCourseCode,
         students: new Set(),
         teacherName: record.teacherName,
+        isMS: record.isMS,
       });
+    } else if (record.isMS) {
+      coursesMap.get(record.courseCode)!.isMS = true;
     }
     coursesMap.get(record.courseCode)!.students.add(record.enrollment);
 
@@ -147,7 +155,24 @@ export function generateSchedule(
     let minConflictSlot = -1;
     let minConflicts = Infinity;
 
-    for (let i = 0; i < timeSlots.length; i++) {
+    let preferredIndices: number[] = [];
+    if (course.isMS) {
+      // First, all session 2 slots
+      for (let i = 0; i < timeSlots.length; i++) {
+        if (timeSlots[i].session === 2) preferredIndices.push(i);
+      }
+      // Then, all other slots
+      for (let i = 0; i < timeSlots.length; i++) {
+        if (timeSlots[i].session !== 2) preferredIndices.push(i);
+      }
+    } else {
+      // Chronological
+      for (let i = 0; i < timeSlots.length; i++) {
+        preferredIndices.push(i);
+      }
+    }
+
+    for (const i of preferredIndices) {
       let hasConflict = false;
       let currentSlotConflicts = 0;
 
