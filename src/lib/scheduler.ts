@@ -31,7 +31,8 @@ export function generateSchedule(
   startDate: Date,
   numDays: number,
   sessionsPerDay: number,
-  skipWeekends: boolean = true
+  skipWeekends: boolean = true,
+  previousResult: ScheduleResult | null = null
 ): ScheduleResult {
   // 1. Identify columns globally
   const allKeys = new Set<string>();
@@ -141,8 +142,33 @@ export function generateSchedule(
   }
 
   // 5. Graph Coloring (Welsh-Powell Algorithm)
-  // Sort courses by degree (number of conflicts) descending
-  courses.sort((a, b) => conflicts.get(b.courseCode)!.size - conflicts.get(a.courseCode)!.size);
+  // Extract previous assignments if available
+  const previousAssignments = new Map<string, number>();
+  if (previousResult) {
+    previousResult.scheduledCourses.forEach(sc => {
+      if (sc.timeSlot) {
+        // Find matching slot index in current timeSlots
+        const slotIndex = timeSlots.findIndex(ts => 
+          ts.date.getTime() === sc.timeSlot!.date.getTime() && 
+          ts.session === sc.timeSlot!.session
+        );
+        if (slotIndex !== -1) {
+          previousAssignments.set(sc.courseCode, slotIndex);
+        }
+      }
+    });
+  }
+
+  // Sort courses: Previously scheduled courses first, then by degree (number of conflicts) descending
+  courses.sort((a, b) => {
+    const aHasPrev = previousAssignments.has(a.courseCode);
+    const bHasPrev = previousAssignments.has(b.courseCode);
+    
+    if (aHasPrev && !bHasPrev) return -1;
+    if (!aHasPrev && bHasPrev) return 1;
+    
+    return conflicts.get(b.courseCode)!.size - conflicts.get(a.courseCode)!.size;
+  });
 
   const scheduledCourses: ScheduledCourse[] = [];
   const slotAssignments = new Map<string, number>(); // courseCode -> slotIndex
@@ -155,43 +181,62 @@ export function generateSchedule(
     let minConflictSlot = -1;
     let minConflicts = Infinity;
 
-    let preferredIndices: number[] = [];
-    if (course.isMS) {
-      // First, all session 2 slots
-      for (let i = 0; i < timeSlots.length; i++) {
-        if (timeSlots[i].session === 2) preferredIndices.push(i);
-      }
-      // Then, all other slots
-      for (let i = 0; i < timeSlots.length; i++) {
-        if (timeSlots[i].session !== 2) preferredIndices.push(i);
-      }
-    } else {
-      // Chronological
-      for (let i = 0; i < timeSlots.length; i++) {
-        preferredIndices.push(i);
-      }
-    }
-
-    for (const i of preferredIndices) {
+    // 1. Try to keep previous assignment
+    const prevSlotIndex = previousAssignments.get(course.courseCode);
+    if (prevSlotIndex !== undefined) {
       let hasConflict = false;
-      let currentSlotConflicts = 0;
-
       const neighbors = conflicts.get(course.courseCode)!;
       neighbors.forEach((neighbor) => {
-        if (slotAssignments.get(neighbor) === i) {
+        if (slotAssignments.get(neighbor) === prevSlotIndex) {
           hasConflict = true;
-          currentSlotConflicts++;
         }
       });
 
       if (!hasConflict) {
-        assignedSlot = i;
-        break;
+        assignedSlot = prevSlotIndex;
+      }
+    }
+
+    // 2. If no previous assignment or it caused a conflict, find the best available slot
+    if (assignedSlot === -1) {
+      let preferredIndices: number[] = [];
+      if (course.isMS) {
+        // First, all session 2 slots
+        for (let i = 0; i < timeSlots.length; i++) {
+          if (timeSlots[i].session === 2) preferredIndices.push(i);
+        }
+        // Then, all other slots
+        for (let i = 0; i < timeSlots.length; i++) {
+          if (timeSlots[i].session !== 2) preferredIndices.push(i);
+        }
+      } else {
+        // Chronological
+        for (let i = 0; i < timeSlots.length; i++) {
+          preferredIndices.push(i);
+        }
       }
 
-      if (currentSlotConflicts < minConflicts) {
-        minConflicts = currentSlotConflicts;
-        minConflictSlot = i;
+      for (const i of preferredIndices) {
+        let hasConflict = false;
+        let currentSlotConflicts = 0;
+
+        const neighbors = conflicts.get(course.courseCode)!;
+        neighbors.forEach((neighbor) => {
+          if (slotAssignments.get(neighbor) === i) {
+            hasConflict = true;
+            currentSlotConflicts++;
+          }
+        });
+
+        if (!hasConflict) {
+          assignedSlot = i;
+          break;
+        }
+
+        if (currentSlotConflicts < minConflicts) {
+          minConflicts = currentSlotConflicts;
+          minConflictSlot = i;
+        }
       }
     }
 

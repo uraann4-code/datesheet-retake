@@ -2,11 +2,16 @@ import React, { useState } from 'react';
 import { FileUpload } from './FileUpload';
 import { ConfigurationPanel } from './ConfigurationPanel';
 import { ResultsTable } from './ResultsTable';
+import { ApprovalPanel, ApprovableRecord } from './ApprovalPanel';
 import { generateSchedule, ScheduleResult } from '../lib/scheduler';
-import { CalendarDays, AlertTriangle, Plus } from 'lucide-react';
+import { CalendarDays, Plus, ArrowLeft } from 'lucide-react';
+
+type Step = 'upload' | 'approve' | 'results';
 
 export function DatesheetGenerator() {
-  const [data, setData] = useState<any[]>([]);
+  const [records, setRecords] = useState<ApprovableRecord[]>([]);
+  const [step, setStep] = useState<Step>('upload');
+  
   const [startDate, setStartDate] = useState<string>(
     new Date().toISOString().split('T')[0]
   );
@@ -19,44 +24,66 @@ export function DatesheetGenerator() {
   const [resetKey, setResetKey] = useState<number>(0);
 
   const handleDataLoaded = (jsonData: any[]) => {
-    setData(jsonData);
-    setResult(null); // Reset previous results
+    const initialRecords = jsonData.map((row, index) => ({
+      ...row,
+      _id: `rec_${index}`,
+      _status: 'pending' as const
+    }));
+    setRecords(initialRecords);
+    setResult(null);
+    setStep('approve');
   };
 
   const handleReset = () => {
-    setData([]);
+    setRecords([]);
     setResult(null);
     setResetKey(prev => prev + 1);
     setStartDate(new Date().toISOString().split('T')[0]);
     setNumDays(10);
     setSessionsPerDay(2);
     setSkipWeekends(true);
+    setStep('upload');
   };
 
   const handleGenerate = () => {
-    if (data.length === 0) return;
+    const approvedRecords = records
+      .filter(r => r._status === 'approved' || r._status === 'late_approved')
+      .map(r => {
+        const { _id, _status, ...rest } = r;
+        return rest;
+      });
+
+    if (approvedRecords.length === 0) {
+      alert("Please approve at least one course before generating the datesheet.");
+      return;
+    }
     
     setIsGenerating(true);
+    setStep('results');
     
     // Use setTimeout to allow UI to update before heavy computation
     setTimeout(() => {
       try {
         const scheduleResult = generateSchedule(
-          data,
+          approvedRecords,
           new Date(startDate),
           numDays,
           sessionsPerDay,
-          skipWeekends
+          skipWeekends,
+          result // Pass the previous result here
         );
         setResult(scheduleResult);
       } catch (error) {
         console.error("Error generating schedule:", error);
         alert("An error occurred while generating the schedule. Please check your data format.");
+        setStep('approve');
       } finally {
         setIsGenerating(false);
       }
     }, 100);
   };
+
+  const approvedCount = records.filter(r => r._status === 'approved' || r._status === 'late_approved').length;
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900 font-sans p-4 md:p-8">
@@ -72,11 +99,11 @@ export function DatesheetGenerator() {
                 Automated Datesheet Generator
               </h1>
               <p className="text-gray-500 mt-1">
-                Upload student enrollments and generate conflict-free exam schedules instantly.
+                Upload student enrollments, approve cases, and generate conflict-free exam schedules.
               </p>
             </div>
           </div>
-          {data.length > 0 && (
+          {records.length > 0 && (
             <button
               onClick={handleReset}
               className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium shadow-sm whitespace-nowrap"
@@ -96,9 +123,9 @@ export function DatesheetGenerator() {
               </h3>
               <FileUpload key={resetKey} onDataLoaded={handleDataLoaded} isLoading={isGenerating} />
               
-              {data.length > 0 && (
+              {records.length > 0 && (
                 <div className="mt-4 p-3 bg-green-50 text-green-700 rounded-lg text-sm font-medium border border-green-200">
-                  Successfully loaded {data.length} records.
+                  Successfully loaded {records.length} records.
                 </div>
               )}
             </div>
@@ -113,55 +140,80 @@ export function DatesheetGenerator() {
               skipWeekends={skipWeekends}
               setSkipWeekends={setSkipWeekends}
               onGenerate={handleGenerate}
-              isReady={data.length > 0 && !isGenerating}
+              isReady={records.length > 0 && approvedCount > 0 && !isGenerating}
             />
+            
+            {records.length > 0 && approvedCount === 0 && step === 'approve' && (
+              <p className="text-sm text-amber-600 font-medium text-center bg-amber-50 p-3 rounded-lg border border-amber-200">
+                Please approve at least one course to generate the datesheet.
+              </p>
+            )}
           </div>
 
-          {/* Right Column: Results */}
+          {/* Right Column: Main Content Area */}
           <div className="lg:col-span-3">
-            {isGenerating ? (
-              <div className="h-full min-h-[400px] flex flex-col items-center justify-center bg-white rounded-xl shadow-sm border border-gray-100">
-                <div className="w-16 h-16 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mb-4"></div>
-                <p className="text-lg font-medium text-gray-600">
-                  Generating optimal schedule...
-                </p>
-                <p className="text-sm text-gray-400 mt-2">
-                  Resolving student conflicts and assigning time slots.
-                </p>
-              </div>
-            ) : result ? (
-              result.totalCourses === 0 ? (
-                <div className="h-full min-h-[400px] flex flex-col items-center justify-center bg-white rounded-xl shadow-sm border border-red-100 text-center p-8">
-                  <div className="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center mb-4">
-                    <AlertTriangle className="w-10 h-10 text-red-500" />
-                  </div>
-                  <h3 className="text-xl font-semibold text-gray-700 mb-2">
-                    No Courses Found
-                  </h3>
-                  <p className="text-gray-500 max-w-md">
-                    We couldn't find the required columns in your Excel file. Please ensure your file has columns for <strong>Enrollment</strong> and <strong>Course Code</strong>.
-                  </p>
-                </div>
-              ) : (
-                <ResultsTable
-                  data={result.datesheet}
-                  totalClashes={result.totalClashes}
-                  totalCourses={result.totalCourses}
-                  totalStudents={result.totalStudents}
-                  unresolvedConflicts={result.unresolvedConflicts}
-                />
-              )
-            ) : (
-              <div className="h-full min-h-[400px] flex flex-col items-center justify-center bg-white rounded-xl shadow-sm border border-gray-100 text-center p-8">
+            {step === 'upload' && (
+              <div className="h-full min-h-[500px] flex flex-col items-center justify-center bg-white rounded-xl shadow-sm border border-gray-100 text-center p-8">
                 <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center mb-4">
                   <CalendarDays className="w-10 h-10 text-gray-300" />
                 </div>
                 <h3 className="text-xl font-semibold text-gray-700 mb-2">
-                  No Schedule Generated Yet
+                  No Data Uploaded
                 </h3>
                 <p className="text-gray-500 max-w-md">
-                  Upload an Excel file with student enrollments and configure your schedule parameters on the left to get started.
+                  Upload an Excel file with student enrollments on the left to begin the approval and scheduling process.
                 </p>
+              </div>
+            )}
+
+            {step === 'approve' && (
+              <ApprovalPanel records={records} setRecords={setRecords} />
+            )}
+
+            {step === 'results' && (
+              <div className="space-y-4">
+                <button
+                  onClick={() => setStep('approve')}
+                  className="flex items-center gap-2 text-blue-600 hover:text-blue-800 font-medium transition-colors"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                  Back to Approvals
+                </button>
+                
+                {isGenerating ? (
+                  <div className="h-[500px] flex flex-col items-center justify-center bg-white rounded-xl shadow-sm border border-gray-100">
+                    <div className="w-16 h-16 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mb-4"></div>
+                    <p className="text-lg font-medium text-gray-600">
+                      Generating optimal schedule...
+                    </p>
+                    <p className="text-sm text-gray-400 mt-2">
+                      Scheduling {approvedCount} approved courses.
+                    </p>
+                  </div>
+                ) : result ? (
+                  result.totalCourses === 0 ? (
+                    <div className="h-[500px] flex flex-col items-center justify-center bg-white rounded-xl shadow-sm border border-red-100 text-center p-8">
+                      <div className="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center mb-4">
+                        <span className="text-4xl">⚠️</span>
+                      </div>
+                      <h3 className="text-xl font-semibold text-gray-700 mb-2">
+                        No Courses Found
+                      </h3>
+                      <p className="text-gray-500 max-w-md">
+                        We couldn't find the required columns in your Excel file. Please ensure your file has columns for <strong>Enrollment</strong> and <strong>Course Code</strong>.
+                      </p>
+                    </div>
+                  ) : (
+                    <ResultsTable
+                      data={result.datesheet}
+                      records={records}
+                      totalClashes={result.totalClashes}
+                      totalCourses={result.totalCourses}
+                      totalStudents={result.totalStudents}
+                      unresolvedConflicts={result.unresolvedConflicts}
+                    />
+                  )
+                ) : null}
               </div>
             )}
           </div>
