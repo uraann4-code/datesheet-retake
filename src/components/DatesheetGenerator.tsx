@@ -1,16 +1,19 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { FileUpload } from './FileUpload';
 import { ConfigurationPanel } from './ConfigurationPanel';
 import { ResultsTable } from './ResultsTable';
 import { ApprovalPanel, ApprovableRecord } from './ApprovalPanel';
 import { generateSchedule, ScheduleResult } from '../lib/scheduler';
-import { CalendarDays, Plus, ArrowLeft, CheckCircle2 } from 'lucide-react';
+import { CalendarDays, Plus, ArrowLeft, CheckCircle2, Cloud } from 'lucide-react';
+import { createWorkspace, loadLatestWorkspace } from '../lib/db';
 
 type Step = 'upload' | 'approve' | 'results';
 
 export function DatesheetGenerator() {
   const [records, setRecords] = useState<ApprovableRecord[]>([]);
   const [step, setStep] = useState<Step>('upload');
+  const [workspaceId, setWorkspaceId] = useState<string | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
   
   const [startDate, setStartDate] = useState<string>(
     new Date().toISOString().split('T')[0]
@@ -23,21 +26,46 @@ export function DatesheetGenerator() {
   const [result, setResult] = useState<ScheduleResult | null>(null);
   const [resetKey, setResetKey] = useState<number>(0);
 
-  const handleDataLoaded = (jsonData: any[]) => {
+  // Load latest workspace on mount
+  useEffect(() => {
+    async function loadData() {
+      setIsSyncing(true);
+      const ws = await loadLatestWorkspace();
+      if (ws) {
+        setWorkspaceId(ws.workspaceId);
+        setRecords(ws.records);
+        setStep('approve');
+      }
+      setIsSyncing(false);
+    }
+    loadData();
+  }, []);
+
+  const handleDataLoaded = async (jsonData: any[]) => {
+    setIsSyncing(true);
     const initialRecords = jsonData.map((row, index) => ({
       ...row,
-      _id: `rec_${index}`,
+      _id: `rec_${Date.now()}_${index}`,
       _status: 'pending' as const
     }));
+    
+    const newWorkspaceId = `ws_${Date.now()}`;
+    setWorkspaceId(newWorkspaceId);
     setRecords(initialRecords);
+    
+    // Save to Firestore
+    await createWorkspace(newWorkspaceId, `Datesheet ${new Date().toLocaleDateString()}`, initialRecords);
+    
     setResult(null);
     setStep('approve');
+    setIsSyncing(false);
   };
 
   const handleReset = () => {
     setRecords([]);
     setResult(null);
     setResetKey(prev => prev + 1);
+    setWorkspaceId(null);
     setStartDate(new Date().toISOString().split('T')[0]);
     setNumDays(10);
     setSessionsPerDay(2);
@@ -101,9 +129,20 @@ export function DatesheetGenerator() {
               <CalendarDays className="w-8 h-8" />
             </div>
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">
-                Automated Datesheet Generator
-              </h1>
+              <div className="flex items-center gap-3">
+                <h1 className="text-3xl font-bold text-gray-900">
+                  Automated Datesheet Generator
+                </h1>
+                {isSyncing ? (
+                  <span className="flex items-center gap-1 text-xs font-medium text-blue-600 bg-blue-50 px-2 py-1 rounded-full">
+                    <Cloud className="w-3 h-3 animate-pulse" /> Syncing...
+                  </span>
+                ) : workspaceId ? (
+                  <span className="flex items-center gap-1 text-xs font-medium text-green-600 bg-green-50 px-2 py-1 rounded-full">
+                    <Cloud className="w-3 h-3" /> Saved to Cloud
+                  </span>
+                ) : null}
+              </div>
               <p className="text-gray-500 mt-1">
                 Upload student enrollments, approve cases, and generate conflict-free exam schedules.
               </p>
@@ -212,7 +251,11 @@ export function DatesheetGenerator() {
             )}
 
             {step === 'approve' && (
-              <ApprovalPanel records={records} setRecords={setRecords} />
+              <ApprovalPanel 
+                records={records} 
+                setRecords={setRecords}
+                workspaceId={workspaceId}
+              />
             )}
 
             {step === 'results' && (

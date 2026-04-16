@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Search, Check, X, CheckCircle2, Building2, FileSpreadsheet, FileText } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { updateRecordStatus, updateMultipleRecordStatuses } from '../lib/db';
 
 export interface ApprovableRecord {
   _id: string;
@@ -11,9 +12,10 @@ export interface ApprovableRecord {
 interface ApprovalPanelProps {
   records: ApprovableRecord[];
   setRecords: React.Dispatch<React.SetStateAction<ApprovableRecord[]>>;
+  workspaceId: string | null;
 }
 
-export function ApprovalPanel({ records, setRecords }: ApprovalPanelProps) {
+export function ApprovalPanel({ records, setRecords, workspaceId }: ApprovalPanelProps) {
   const [searchQuery, setSearchQuery] = useState('');
 
   // Find enrollment and course keys for display
@@ -33,21 +35,25 @@ export function ApprovalPanel({ records, setRecords }: ApprovalPanelProps) {
     return records.filter(r => String(r[enrollmentKey] || '').toLowerCase().includes(query));
   }, [records, searchQuery, enrollmentKey]);
 
-  const handleApprove = (id: string) => {
+  const handleApprove = async (id: string) => {
     setRecords(prev => prev.map(r => r._id === id ? { ...r, _status: 'approved' } : r));
+    if (workspaceId) await updateRecordStatus(workspaceId, id, 'approved');
   };
 
-  const handleLateApprove = (id: string) => {
+  const handleLateApprove = async (id: string) => {
     setRecords(prev => prev.map(r => r._id === id ? { ...r, _status: 'late_approved' } : r));
+    if (workspaceId) await updateRecordStatus(workspaceId, id, 'late_approved');
   };
 
-  const handleReject = (id: string) => {
+  const handleReject = async (id: string) => {
     setRecords(prev => prev.map(r => r._id === id ? { ...r, _status: 'rejected' } : r));
+    if (workspaceId) await updateRecordStatus(workspaceId, id, 'rejected');
   };
 
-  const handleApproveAllSearched = () => {
+  const handleApproveAllSearched = async () => {
     const searchedIds = new Set(searchedRecords.map(r => r._id));
     setRecords(prev => prev.map(r => searchedIds.has(r._id) ? { ...r, _status: 'approved' } : r));
+    if (workspaceId) await updateMultipleRecordStatuses(workspaceId, Array.from(searchedIds) as string[], 'approved');
   };
 
   const approvedCount = records.filter(r => r._status === 'approved' || r._status === 'late_approved').length;
@@ -56,50 +62,60 @@ export function ApprovalPanel({ records, setRecords }: ApprovalPanelProps) {
   const handleExportDGIC = () => {
     if (!records || records.length === 0) return;
     
+    // Sort records: Recommended (approved/late_approved) first, then others
     const sortedRecords = [...records].sort((a, b) => {
       const isARecommended = a._status === 'approved' || a._status === 'late_approved' ? 0 : 1;
       const isBRecommended = b._status === 'approved' || b._status === 'late_approved' ? 0 : 1;
       return isARecommended - isBRecommended;
     });
 
-    let html = '<table border="1"><thead><tr>';
-    const headers = Object.keys(records[0]).filter(k => !k.startsWith('_'));
-    headers.push('DECission');
-    
-    headers.forEach(h => {
-      html += `<th style="background-color: #f3f4f6; font-weight: bold;">${h}</th>`;
+    // Find keys from the original data that match the required columns
+    const keys = Object.keys(records[0]).filter(k => !k.startsWith('_'));
+    const findKey = (searchTerms: string[]) => {
+      return keys.find(k => searchTerms.some(term => k.toLowerCase().replace(/[\s_]+/g, '').includes(term.toLowerCase().replace(/[\s_]+/g, ''))));
+    };
+
+    const nameKey = findKey(['name']) || 'Name';
+    const enrollmentKey = findKey(['enrollment', 'registration']) || 'Enrollment';
+    const classKey = findKey(['class', 'program']) || 'Class';
+    const subjectKey = findKey(['subject', 'course']) || 'Subject';
+    const codeKey = findKey(['code', 'coursecode']) || 'CODE';
+    const teacherKey = findKey(['teacher']) || 'Teacher Name';
+    const remarksKey = findKey(['remark', 'reason']) || 'Remarks(If Any)';
+
+    // Create the data for the sheet
+    const exportData = sortedRecords.map((row, index) => {
+      let decision = '';
+      if (row._status === 'approved') decision = 'Recommended';
+      else if (row._status === 'late_approved') decision = 'Recommended';
+      else if (row._status === 'rejected') decision = 'Not Recommended';
+      else decision = 'Pending';
+
+      return {
+        'S#': index + 1,
+        'Name': row[nameKey] || '',
+        'Enrollment': row[enrollmentKey] || '',
+        'Class': row[classKey] || '',
+        'Subject': row[subjectKey] || '',
+        'CODE': row[codeKey] || '',
+        'Teacher Name': row[teacherKey] || '',
+        'Remarks(If Any)': row[remarksKey] || '',
+        'DECission': decision
+      };
     });
-    html += '</tr></thead><tbody>';
+
+    // Create worksheet starting with title
+    const ws = XLSX.utils.aoa_to_sheet([['Retake Applications of Final Term Exam - Fall - 2024']]);
     
-    sortedRecords.forEach(row => {
-      const isLate = row._status === 'late_approved';
-      const rowStyle = isLate ? ' style="background-color: #fee2e2; color: #991b1b;"' : '';
-      
-      html += `<tr${rowStyle}>`;
-      headers.forEach(h => {
-        if (h === 'DECission') {
-          let decision = '';
-          if (row._status === 'approved') decision = 'Recommended';
-          else if (row._status === 'late_approved') decision = 'Recommended (Late)';
-          else if (row._status === 'rejected') decision = 'Not Recommended';
-          else decision = 'Pending';
-          html += `<td>${decision}</td>`;
-        } else {
-          html += `<td>${row[h] || ''}</td>`;
-        }
-      });
-      html += '</tr>';
-    });
-    
-    html += '</tbody></table>';
-    
-    const blob = new Blob([html], { type: 'application/vnd.ms-excel' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'DG_IC_Approval_File.xls';
-    a.click();
-    URL.revokeObjectURL(url);
+    // Add data starting at A2
+    XLSX.utils.sheet_add_json(ws, exportData, { origin: 'A2' });
+
+    // Create workbook
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'DGIC');
+
+    // Write file
+    XLSX.writeFile(wb, 'DG_IC_Approval_File.xlsx');
   };
 
   const handleExportAccountOffice = () => {

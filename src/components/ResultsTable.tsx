@@ -37,47 +37,53 @@ export function ResultsTable({
       return isARecommended - isBRecommended;
     });
 
-    // Create HTML string for Excel to support red highlighting for late approvals
-    let html = '<table border="1"><thead><tr>';
-    
-    // Get headers (excluding internal fields)
-    const headers = Object.keys(records[0]).filter(k => !k.startsWith('_'));
-    headers.push('DECission');
-    
-    headers.forEach(h => {
-      html += `<th style="background-color: #f3f4f6; font-weight: bold;">${h}</th>`;
+    // Find keys from the original data that match the required columns
+    const keys = Object.keys(records[0]).filter(k => !k.startsWith('_'));
+    const findKey = (searchTerms: string[]) => {
+      return keys.find(k => searchTerms.some(term => k.toLowerCase().replace(/[\s_]+/g, '').includes(term.toLowerCase().replace(/[\s_]+/g, ''))));
+    };
+
+    const nameKey = findKey(['name']) || 'Name';
+    const enrollmentKey = findKey(['enrollment', 'registration']) || 'Enrollment';
+    const classKey = findKey(['class', 'program']) || 'Class';
+    const subjectKey = findKey(['subject', 'course']) || 'Subject';
+    const codeKey = findKey(['code', 'coursecode']) || 'CODE';
+    const teacherKey = findKey(['teacher']) || 'Teacher Name';
+    const remarksKey = findKey(['remark', 'reason']) || 'Remarks(If Any)';
+
+    // Create the data for the sheet
+    const exportData = sortedRecords.map((row, index) => {
+      let decision = '';
+      if (row._status === 'approved') decision = 'Recommended';
+      else if (row._status === 'late_approved') decision = 'Recommended'; // User snippet shows "Recommended" for approved cases
+      else if (row._status === 'rejected') decision = 'Not Recommended';
+      else decision = 'Pending';
+
+      return {
+        'S#': index + 1,
+        'Name': row[nameKey] || '',
+        'Enrollment': row[enrollmentKey] || '',
+        'Class': row[classKey] || '',
+        'Subject': row[subjectKey] || '',
+        'CODE': row[codeKey] || '',
+        'Teacher Name': row[teacherKey] || '',
+        'Remarks(If Any)': row[remarksKey] || '',
+        'DECission': decision
+      };
     });
-    html += '</tr></thead><tbody>';
+
+    // Create worksheet starting with title
+    const ws = XLSX.utils.aoa_to_sheet([['Retake Applications of Final Term Exam - Fall - 2024']]);
     
-    sortedRecords.forEach(row => {
-      const isLate = row._status === 'late_approved';
-      const rowStyle = isLate ? ' style="background-color: #fee2e2; color: #991b1b;"' : '';
-      
-      html += `<tr${rowStyle}>`;
-      headers.forEach(h => {
-        if (h === 'DECission') {
-          let decision = '';
-          if (row._status === 'approved') decision = 'Recommended';
-          else if (row._status === 'late_approved') decision = 'Recommended (Late)';
-          else if (row._status === 'rejected') decision = 'Not Recommended';
-          else decision = 'Pending';
-          html += `<td>${decision}</td>`;
-        } else {
-          html += `<td>${row[h] || ''}</td>`;
-        }
-      });
-      html += '</tr>';
-    });
-    
-    html += '</tbody></table>';
-    
-    const blob = new Blob([html], { type: 'application/vnd.ms-excel' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'DG_IC_Approval_File.xls';
-    a.click();
-    URL.revokeObjectURL(url);
+    // Add data starting at A2
+    XLSX.utils.sheet_add_json(ws, exportData, { origin: 'A2' });
+
+    // Create workbook
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'DGIC');
+
+    // Write file
+    XLSX.writeFile(wb, 'DG_IC_Approval_File.xlsx');
   };
 
   const handleExportAccountOffice = () => {
