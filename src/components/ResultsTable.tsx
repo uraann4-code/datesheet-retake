@@ -21,9 +21,52 @@ export function ResultsTable({
   unresolvedConflicts,
 }: ResultsTableProps) {
   const handleExportDatesheet = () => {
-    const ws = XLSX.utils.json_to_sheet(data);
+    if (!data || data.length === 0) return;
+
+    // Find keys from the data
+    const keys = Object.keys(data[0]);
+    const findKey = (searchTerms: string[]) => {
+      return keys.find(k => searchTerms.some(term => k.toLowerCase().replace(/[\s_]+/g, '').includes(term.toLowerCase().replace(/[\s_]+/g, ''))));
+    };
+
+    const nameKey = findKey(['name']) || 'Name';
+    const enrollmentKey = findKey(['enrollment', 'registration']) || 'Enrollment';
+    const programKey = findKey(['program', 'class', 'degree']) || 'Program';
+    const subjectKey = findKey(['subject', 'course']) || 'Subject';
+    const codeKey = findKey(['code', 'coursecode']) || 'Course Code';
+    const teacherKey = findKey(['teacher']) || 'Teacher Name';
+
+    // Map data to the required format
+    const exportData = data.map((row, index) => {
+      // Convert "Session 1" to "I", "Session 2" to "II"
+      let session = row['Session'] || '';
+      if (session === 'Session 1') session = 'I';
+      else if (session === 'Session 2') session = 'II';
+
+      return {
+        'Sr #': index + 1,
+        'Date': row['Date'] || '',
+        'Session': session,
+        'Name': row[nameKey] || '',
+        'Enrollment': row[enrollmentKey] || '',
+        'Program': row[programKey] || '',
+        'Subject': row[subjectKey] || '',
+        'Course Code': row[codeKey] || '',
+        'Teacher Name': row[teacherKey] || ''
+      };
+    });
+
+    // Create worksheet starting with title
+    const ws = XLSX.utils.aoa_to_sheet([['RE-TAKE FINAL EXAM FALL 2025 SEMESTER']]);
+    
+    // Add data starting at A2
+    XLSX.utils.sheet_add_json(ws, exportData, { origin: 'A2' });
+
+    // Create workbook
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Datesheet');
+
+    // Write file
     XLSX.writeFile(wb, 'Exam_Datesheet.xlsx');
   };
 
