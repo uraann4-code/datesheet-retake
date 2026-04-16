@@ -4,7 +4,7 @@ import { ConfigurationPanel } from './ConfigurationPanel';
 import { ResultsTable } from './ResultsTable';
 import { ApprovalPanel, ApprovableRecord } from './ApprovalPanel';
 import { generateSchedule, ScheduleResult } from '../lib/scheduler';
-import { CalendarDays, Plus, ArrowLeft, CheckCircle2, Cloud } from 'lucide-react';
+import { CalendarDays, Plus, ArrowLeft, CheckCircle2, Cloud, FileSpreadsheet } from 'lucide-react';
 import { createWorkspace, loadWorkspaceById } from '../lib/db';
 
 type Step = 'upload' | 'approve' | 'results';
@@ -259,6 +259,43 @@ export function DatesheetGenerator({ workspaceId: initialWorkspaceId }: Dateshee
                   Loaded {records.length} records.
                 </div>
               )}
+            </div>
+
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+              <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                <FileSpreadsheet className="w-5 h-5 text-blue-600" />
+                Excel Format Guide
+              </h3>
+              <p className="text-xs text-gray-500 mb-4 font-medium">
+                Please ensure your Excel file contains these exact columns for accurate generation:
+              </p>
+              <div className="space-y-2">
+                {[
+                  { name: 'Enrollment', desc: 'Registration # (Required)', req: true },
+                  { name: 'Course Code', desc: 'Subject Code (Required)', req: true },
+                  { name: 'Name', desc: 'Student Name', req: false },
+                  { name: 'Subject', desc: 'Course Title', req: false },
+                  { name: 'Program', desc: 'Class/Degree', req: false },
+                  { name: 'Teacher Name', desc: 'Instructor', req: false },
+                ].map((col) => (
+                  <div key={col.name} className="flex items-center justify-between p-2.5 bg-gray-50 rounded-xl border border-gray-100">
+                    <div>
+                      <p className="text-xs font-black text-gray-900">{col.name}</p>
+                      <p className="text-[10px] text-gray-400 font-bold uppercase tracking-tight">{col.desc}</p>
+                    </div>
+                    {col.req && (
+                      <span className="text-[10px] font-black text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-md border border-blue-100">
+                        REQ
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4 p-3 bg-amber-50 rounded-xl border border-amber-100">
+                <p className="text-[10px] text-amber-800 font-bold leading-tight">
+                  Note: Column names can be slightly different (e.g., "Reg #" instead of "Enrollment"), but the data must be present.
+                </p>
+              </div>
             </div>
 
             <ConfigurationPanel

@@ -73,11 +73,8 @@ export function ResultsTable({
     const handleExportDGIC = () => {
     if (!records || records.length === 0) return;
     
-    // Filter out pending records for DGIC export
-    const actedRecords = records.filter(r => r._status !== 'pending');
-    
-    // Sort records: Recommended (approved/late_approved) first, then others
-    const sortedRecords = [...actedRecords].sort((a, b) => {
+    // Include all records for DGIC export to ensure a complete list for approval
+    const sortedRecords = [...records].sort((a, b) => {
       const isARecommended = a._status === 'approved' || a._status === 'late_approved' ? 0 : 1;
       const isBRecommended = b._status === 'approved' || b._status === 'late_approved' ? 0 : 1;
       return isARecommended - isBRecommended;
