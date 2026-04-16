@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { DatesheetGenerator } from './components/DatesheetGenerator';
+import { Dashboard } from './components/Dashboard';
 import { db, auth } from './lib/firebase';
 import { doc, getDocFromServer } from 'firebase/firestore';
 import { 
@@ -9,7 +10,7 @@ import {
   signOut 
 } from 'firebase/auth';
 import { createUserProfile } from './lib/db';
-import { Lock, Mail, AlertCircle, Loader2 } from 'lucide-react';
+import { Lock, Mail, AlertCircle, Loader2, LayoutDashboard, LogOut } from 'lucide-react';
 
 export default function App() {
   const [user, setUser] = useState<any>(null);
@@ -18,6 +19,10 @@ export default function App() {
   const [password, setPassword] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [error, setError] = useState('');
+  
+  // View management
+  const [currentWorkspaceId, setCurrentWorkspaceId] = useState<string | null>(null);
+  const [isStartingNew, setIsStartingNew] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (u) => {
@@ -46,52 +51,50 @@ export default function App() {
     if (email.trim().toLowerCase() === targetEmail && password === targetPassword) {
       setIsLoggingIn(true);
       try {
-        // Try to sign in
         try {
           const result = await signInWithEmailAndPassword(auth, targetEmail, targetPassword);
           setUser(result.user);
         } catch (signInErr: any) {
-          // If user doesn't exist or other error, try to create
           if (signInErr.code === 'auth/user-not-found' || signInErr.code === 'auth/invalid-credential' || signInErr.code === 'auth/invalid-login-credentials') {
             try {
               const result = await createUserWithEmailAndPassword(auth, targetEmail, targetPassword);
               setUser(result.user);
             } catch (createErr: any) {
               if (createErr.code === 'auth/operation-not-allowed') {
-                setError('Email/Password login is not enabled in Firebase. Please enable it in the Firebase Console (Authentication > Sign-in method).');
+                setError('Email/Password login is not enabled in Firebase. Please enable it in the Firebase Console.');
               } else {
                 throw createErr;
               }
             }
-          } else if (signInErr.code === 'auth/operation-not-allowed') {
-            setError('Email/Password login is not enabled in Firebase. Please enable it in the Firebase Console (Authentication > Sign-in method).');
           } else {
             throw signInErr;
           }
         }
       } catch (err: any) {
-        setError(err.message || 'Login failed. Please check your internet connection.');
+        setError(err.message || 'Login failed.');
         console.error("Login Error:", err);
       } finally {
         setIsLoggingIn(false);
       }
     } else {
-      setError('Invalid email or password. Please use the provided admin credentials.');
+      setError('Invalid email or password.');
     }
   };
 
-  useEffect(() => {
-    async function testConnection() {
-      try {
-        await getDocFromServer(doc(db, 'test', 'connection'));
-      } catch (error) {
-        if (error instanceof Error && error.message.includes('the client is offline')) {
-          console.error("Please check your Firebase configuration.");
-        }
-      }
-    }
-    testConnection();
-  }, []);
+  const handleSelectWorkspace = (id: string) => {
+    setCurrentWorkspaceId(id);
+    setIsStartingNew(false);
+  };
+
+  const handleStartNew = () => {
+    setCurrentWorkspaceId(null);
+    setIsStartingNew(true);
+  };
+
+  const handleGoBack = () => {
+    setCurrentWorkspaceId(null);
+    setIsStartingNew(false);
+  };
 
   if (loading) {
     return (
@@ -148,7 +151,7 @@ export default function App() {
             </div>
 
             {error && (
-              <div className="flex items-center gap-2 p-4 bg-red-50 border border-red-100 rounded-2xl text-red-600 text-sm font-bold animate-shake">
+              <div className="flex items-center gap-2 p-4 bg-red-50 border border-red-100 rounded-2xl text-red-600 text-sm font-bold">
                 <AlertCircle className="w-5 h-5 shrink-0" />
                 <p>{error}</p>
               </div>
@@ -169,10 +172,6 @@ export default function App() {
               )}
             </button>
           </form>
-          
-          <div className="mt-8 pt-6 border-t border-gray-50">
-            <p className="text-xs text-gray-400 font-bold uppercase tracking-widest">Secure Admin Access</p>
-          </div>
         </div>
       </div>
     );
@@ -181,23 +180,42 @@ export default function App() {
   return (
     <div className="min-h-screen bg-gray-50 font-sans">
       <div className="bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center shadow-sm sticky top-0 z-50">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-blue-700 text-white rounded-xl flex items-center justify-center font-black shadow-md">
-            {user.email?.[0].toUpperCase()}
+        <div className="flex items-center gap-6">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-blue-700 text-white rounded-xl flex items-center justify-center font-black shadow-md">
+              {user.email?.[0].toUpperCase()}
+            </div>
+            <div className="hidden sm:block">
+              <p className="text-xs font-black text-gray-400 uppercase tracking-wider leading-none mb-1">Administrator</p>
+              <p className="text-sm font-bold text-gray-900 leading-none">{user.email}</p>
+            </div>
           </div>
-          <div className="hidden sm:block">
-            <p className="text-xs font-black text-gray-400 uppercase tracking-wider leading-none mb-1">Administrator</p>
-            <p className="text-sm font-bold text-gray-900 leading-none">{user.email}</p>
-          </div>
+          
+          {(currentWorkspaceId || isStartingNew) && (
+            <button
+              onClick={handleGoBack}
+              className="flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-blue-600 transition-colors px-4 py-2 rounded-xl hover:bg-blue-50"
+            >
+              <LayoutDashboard className="w-4 h-4" />
+              History
+            </button>
+          )}
         </div>
+        
         <button 
           onClick={() => signOut(auth)} 
-          className="text-sm font-bold text-red-600 hover:text-red-700 hover:bg-red-50 px-4 py-2 rounded-xl transition-all border border-transparent hover:border-red-100"
+          className="text-sm font-bold text-red-600 hover:text-red-700 hover:bg-red-50 px-4 py-2 rounded-xl transition-all flex items-center gap-2"
         >
+          <LogOut className="w-4 h-4" />
           Sign Out
         </button>
       </div>
-      <DatesheetGenerator />
+
+      {!currentWorkspaceId && !isStartingNew ? (
+        <Dashboard onSelectWorkspace={handleSelectWorkspace} onStartNew={handleStartNew} />
+      ) : (
+        <DatesheetGenerator workspaceId={currentWorkspaceId} />
+      )}
     </div>
   );
 }

@@ -9,11 +9,16 @@ import { createWorkspace, loadLatestWorkspace } from '../lib/db';
 
 type Step = 'upload' | 'approve' | 'results';
 
-export function DatesheetGenerator() {
+interface DatesheetGeneratorProps {
+  workspaceId?: string | null;
+}
+
+export function DatesheetGenerator({ workspaceId: initialWorkspaceId }: DatesheetGeneratorProps) {
   const [records, setRecords] = useState<ApprovableRecord[]>([]);
   const [step, setStep] = useState<Step>('upload');
-  const [workspaceId, setWorkspaceId] = useState<string | null>(null);
+  const [workspaceId, setWorkspaceId] = useState<string | null>(initialWorkspaceId || null);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [directSchedule, setDirectSchedule] = useState(false);
   
   const [startDate, setStartDate] = useState<string>(
     new Date().toISOString().split('T')[0]
@@ -26,11 +31,19 @@ export function DatesheetGenerator() {
   const [result, setResult] = useState<ScheduleResult | null>(null);
   const [resetKey, setResetKey] = useState<number>(0);
 
-  // Load latest workspace on mount
+  // Load workspace if ID is provided
   useEffect(() => {
     async function loadData() {
+      if (!initialWorkspaceId) {
+        setStep('upload');
+        setRecords([]);
+        setWorkspaceId(null);
+        return;
+      }
+      
       setIsSyncing(true);
-      const ws = await loadLatestWorkspace();
+      const { loadWorkspaceById } = await import('../lib/db');
+      const ws = await loadWorkspaceById(initialWorkspaceId);
       if (ws) {
         setWorkspaceId(ws.workspaceId);
         setRecords(ws.records);
@@ -39,14 +52,14 @@ export function DatesheetGenerator() {
       setIsSyncing(false);
     }
     loadData();
-  }, []);
+  }, [initialWorkspaceId]);
 
   const handleDataLoaded = async (jsonData: any[]) => {
     setIsSyncing(true);
     const initialRecords = jsonData.map((row, index) => ({
       ...row,
       _id: `rec_${Date.now()}_${index}`,
-      _status: 'pending' as const
+      _status: directSchedule ? 'approved' : 'pending' as any
     }));
     
     const newWorkspaceId = `ws_${Date.now()}`;
@@ -57,24 +70,17 @@ export function DatesheetGenerator() {
     await createWorkspace(newWorkspaceId, `Datesheet ${new Date().toLocaleDateString()}`, initialRecords);
     
     setResult(null);
-    setStep('approve');
+    if (directSchedule) {
+      handleGenerate(initialRecords);
+    } else {
+      setStep('approve');
+    }
     setIsSyncing(false);
   };
 
-  const handleReset = () => {
-    setRecords([]);
-    setResult(null);
-    setResetKey(prev => prev + 1);
-    setWorkspaceId(null);
-    setStartDate(new Date().toISOString().split('T')[0]);
-    setNumDays(10);
-    setSessionsPerDay(2);
-    setSkipWeekends(true);
-    setStep('upload');
-  };
-
-  const handleGenerate = () => {
-    const approvedRecords = records
+  const handleGenerate = (recordsToUse?: ApprovableRecord[]) => {
+    const sourceRecords = recordsToUse || records;
+    const approvedRecords = sourceRecords
       .filter(r => r._status === 'approved' || r._status === 'late_approved')
       .map(r => {
         const { _id, _status, ...rest } = r;
@@ -111,6 +117,19 @@ export function DatesheetGenerator() {
     }, 100);
   };
 
+  const handleReset = () => {
+    setRecords([]);
+    setResult(null);
+    setResetKey(prev => prev + 1);
+    setWorkspaceId(null);
+    setStartDate(new Date().toISOString().split('T')[0]);
+    setNumDays(10);
+    setSessionsPerDay(2);
+    setSkipWeekends(true);
+    setStep('upload');
+    setDirectSchedule(false);
+  };
+
   const approvedCount = records.filter(r => r._status === 'approved' || r._status === 'late_approved').length;
 
   const steps = [
@@ -131,7 +150,7 @@ export function DatesheetGenerator() {
             <div>
               <div className="flex items-center gap-3">
                 <h1 className="text-3xl font-bold text-gray-900">
-                  Automated Datesheet Generator
+                  Datesheet Generator
                 </h1>
                 {isSyncing ? (
                   <span className="flex items-center gap-1 text-xs font-medium text-blue-600 bg-blue-50 px-2 py-1 rounded-full">
@@ -144,19 +163,10 @@ export function DatesheetGenerator() {
                 ) : null}
               </div>
               <p className="text-gray-500 mt-1">
-                Upload student enrollments, approve cases, and generate conflict-free exam schedules.
+                Generate conflict-free exam schedules with manual or direct approval.
               </p>
             </div>
           </div>
-          {records.length > 0 && (
-            <button
-              onClick={handleReset}
-              className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium shadow-sm whitespace-nowrap"
-            >
-              <Plus className="w-4 h-4" />
-              Start New Datesheet
-            </button>
-          )}
         </header>
 
         {/* Stepper */}
@@ -204,6 +214,39 @@ export function DatesheetGenerator() {
               <h3 className="text-lg font-semibold text-gray-800 mb-4">
                 1. Upload Data
               </h3>
+              
+              <div className="mb-6 p-4 bg-gray-50 rounded-2xl border border-gray-200">
+                <p className="text-sm font-bold text-gray-700 mb-3">Workflow Choice:</p>
+                <div className="space-y-3">
+                  <label className="flex items-center gap-3 cursor-pointer group">
+                    <input 
+                      type="radio" 
+                      name="workflow" 
+                      checked={!directSchedule} 
+                      onChange={() => setDirectSchedule(false)}
+                      className="w-4 h-4 text-blue-600"
+                    />
+                    <div className="flex-1">
+                      <p className="text-sm font-bold text-gray-900 group-hover:text-blue-600 transition-colors">Manual Approval</p>
+                      <p className="text-xs text-gray-500">Review each case before scheduling.</p>
+                    </div>
+                  </label>
+                  <label className="flex items-center gap-3 cursor-pointer group">
+                    <input 
+                      type="radio" 
+                      name="workflow" 
+                      checked={directSchedule} 
+                      onChange={() => setDirectSchedule(true)}
+                      className="w-4 h-4 text-blue-600"
+                    />
+                    <div className="flex-1">
+                      <p className="text-sm font-bold text-gray-900 group-hover:text-blue-600 transition-colors">Direct Schedule</p>
+                      <p className="text-xs text-gray-500">Auto-approve all and generate immediately.</p>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
               <FileUpload key={resetKey} onDataLoaded={handleDataLoaded} isLoading={isGenerating} />
               
               {records.length > 0 && (
@@ -223,7 +266,7 @@ export function DatesheetGenerator() {
               setSessionsPerDay={setSessionsPerDay}
               skipWeekends={skipWeekends}
               setSkipWeekends={setSkipWeekends}
-              onGenerate={handleGenerate}
+              onGenerate={() => handleGenerate()}
               isReady={records.length > 0 && approvedCount > 0 && !isGenerating}
             />
             

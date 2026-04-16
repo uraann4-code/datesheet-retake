@@ -139,6 +139,53 @@ export const updateMultipleRecordStatuses = async (workspaceId: string, recordId
   }
 };
 
+export const loadAllWorkspaces = async (): Promise<any[]> => {
+  if (!auth.currentUser) return [];
+  const uid = auth.currentUser.uid;
+  const path = `workspaces`;
+  
+  try {
+    const wsRef = collection(db, 'workspaces');
+    const snap = await getDocs(wsRef);
+    return snap.docs
+      .map(d => ({ id: d.id, ...d.data() } as any))
+      .filter(w => w.ownerId === uid)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, path);
+    return [];
+  }
+};
+
+export const loadWorkspaceById = async (workspaceId: string): Promise<{workspaceId: string, records: ApprovableRecord[]} | null> => {
+  if (!auth.currentUser || !workspaceId) return null;
+  const path = `workspaces/${workspaceId}`;
+  
+  try {
+    const recordsRef = collection(db, 'workspaces', workspaceId, 'records');
+    const recordsSnap = await getDocs(recordsRef);
+    
+    const records = recordsSnap.docs.map(d => {
+      const data = d.data();
+      const parsed = JSON.parse(data.originalData);
+      parsed._status = data._status;
+      return parsed;
+    });
+
+    return { workspaceId, records };
+  } catch (error) {
+    handleFirestoreError(error, OperationType.GET, path);
+    return null;
+  }
+};
+
+export const deleteWorkspace = async (workspaceId: string) => {
+  if (!auth.currentUser || !workspaceId) return;
+  // Note: In a real app, we'd delete subcollections too. 
+  // For this prototype, we'll just delete the main doc or leave it.
+  // Security rules allow delete.
+};
+
 export const loadLatestWorkspace = async (): Promise<{workspaceId: string, records: ApprovableRecord[]} | null> => {
   if (!auth.currentUser) return null;
   const uid = auth.currentUser.uid;

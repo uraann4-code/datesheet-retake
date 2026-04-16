@@ -87,7 +87,7 @@ export function ApprovalPanel({ records, setRecords, workspaceId }: ApprovalPane
     const exportData = sortedRecords.map((row, index) => {
       let decision = '';
       if (row._status === 'approved') decision = 'Recommended';
-      else if (row._status === 'late_approved') decision = 'Recommended';
+      else if (row._status === 'late_approved') decision = 'Recommended (Late)';
       else if (row._status === 'rejected') decision = 'Not Recommended';
       else decision = 'Pending';
 

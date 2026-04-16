@@ -70,7 +70,7 @@ export function ResultsTable({
     XLSX.writeFile(wb, 'Exam_Datesheet.xlsx');
   };
 
-  const handleExportDGIC = () => {
+    const handleExportDGIC = () => {
     if (!records || records.length === 0) return;
     
     // Sort records: Recommended (approved/late_approved) first, then others
@@ -98,7 +98,7 @@ export function ResultsTable({
     const exportData = sortedRecords.map((row, index) => {
       let decision = '';
       if (row._status === 'approved') decision = 'Recommended';
-      else if (row._status === 'late_approved') decision = 'Recommended'; // User snippet shows "Recommended" for approved cases
+      else if (row._status === 'late_approved') decision = 'Recommended (Late)';
       else if (row._status === 'rejected') decision = 'Not Recommended';
       else decision = 'Pending';
 
