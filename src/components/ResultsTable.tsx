@@ -73,8 +73,11 @@ export function ResultsTable({
     const handleExportDGIC = () => {
     if (!records || records.length === 0) return;
     
+    // Filter out pending records for DGIC export
+    const actedRecords = records.filter(r => r._status !== 'pending');
+    
     // Sort records: Recommended (approved/late_approved) first, then others
-    const sortedRecords = [...records].sort((a, b) => {
+    const sortedRecords = [...actedRecords].sort((a, b) => {
       const isARecommended = a._status === 'approved' || a._status === 'late_approved' ? 0 : 1;
       const isBRecommended = b._status === 'approved' || b._status === 'late_approved' ? 0 : 1;
       return isARecommended - isBRecommended;
@@ -184,8 +187,8 @@ export function ResultsTable({
       <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h2 className="text-2xl font-bold text-gray-800">Schedule Generated Successfully! 🎉</h2>
-            <p className="text-gray-500 mt-1">Review the summary below and download your final datesheet.</p>
+            <h2 className="text-2xl font-bold text-gray-800">Datesheet Generated (Approved Cases Only) 🎉</h2>
+            <p className="text-gray-500 mt-1">Only Recommended/Approved cases have been scheduled.</p>
           </div>
           <button
             onClick={handleExportDatesheet}
