@@ -5,7 +5,7 @@ import { ResultsTable } from './ResultsTable';
 import { ApprovalPanel, ApprovableRecord } from './ApprovalPanel';
 import { generateSchedule, ScheduleResult } from '../lib/scheduler';
 import { CalendarDays, Plus, ArrowLeft, CheckCircle2, Cloud } from 'lucide-react';
-import { createWorkspace, loadLatestWorkspace } from '../lib/db';
+import { createWorkspace, loadWorkspaceById } from '../lib/db';
 
 type Step = 'upload' | 'approve' | 'results';
 
@@ -42,14 +42,18 @@ export function DatesheetGenerator({ workspaceId: initialWorkspaceId }: Dateshee
       }
       
       setIsSyncing(true);
-      const { loadWorkspaceById } = await import('../lib/db');
-      const ws = await loadWorkspaceById(initialWorkspaceId);
-      if (ws) {
-        setWorkspaceId(ws.workspaceId);
-        setRecords(ws.records);
-        setStep('approve');
+      try {
+        const ws = await loadWorkspaceById(initialWorkspaceId);
+        if (ws) {
+          setWorkspaceId(ws.workspaceId);
+          setRecords(ws.records);
+          setStep('approve');
+        }
+      } catch (err) {
+        console.error("Error loading workspace:", err);
+      } finally {
+        setIsSyncing(false);
       }
-      setIsSyncing(false);
     }
     loadData();
   }, [initialWorkspaceId]);

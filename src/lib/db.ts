@@ -1,5 +1,5 @@
 import { db, auth } from './firebase';
-import { collection, doc, writeBatch, getDocs, updateDoc, setDoc, getDoc } from 'firebase/firestore';
+import { collection, doc, writeBatch, getDocs, updateDoc, setDoc, getDoc, query, where } from 'firebase/firestore';
 import { ApprovableRecord } from '../components/ApprovalPanel';
 
 export enum OperationType {
@@ -146,10 +146,10 @@ export const loadAllWorkspaces = async (): Promise<any[]> => {
   
   try {
     const wsRef = collection(db, 'workspaces');
-    const snap = await getDocs(wsRef);
+    const q = query(wsRef, where('ownerId', '==', uid));
+    const snap = await getDocs(q);
     return snap.docs
       .map(d => ({ id: d.id, ...d.data() } as any))
-      .filter(w => w.ownerId === uid)
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   } catch (error) {
     handleFirestoreError(error, OperationType.LIST, path);

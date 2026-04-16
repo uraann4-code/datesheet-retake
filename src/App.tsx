@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { DatesheetGenerator } from './components/DatesheetGenerator';
 import { Dashboard } from './components/Dashboard';
 import { db, auth } from './lib/firebase';
-import { doc, getDocFromServer } from 'firebase/firestore';
 import { 
   onAuthStateChanged, 
   signInWithEmailAndPassword, 

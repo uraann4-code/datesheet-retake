@@ -14,9 +14,14 @@ export function Dashboard({ onSelectWorkspace, onStartNew }: DashboardProps) {
 
   useEffect(() => {
     const fetchWorkspaces = async () => {
-      const data = await loadAllWorkspaces();
-      setWorkspaces(data);
-      setLoading(false);
+      try {
+        const data = await loadAllWorkspaces();
+        setWorkspaces(data);
+      } catch (err) {
+        console.error("Dashboard error:", err);
+      } finally {
+        setLoading(false);
+      }
     };
     fetchWorkspaces();
   }, []);
