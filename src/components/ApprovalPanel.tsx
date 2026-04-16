@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
-import { Search, Check, X, CheckCircle2 } from 'lucide-react';
+import { Search, Check, X, CheckCircle2, Building2, FileSpreadsheet, FileText } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 export interface ApprovableRecord {
   _id: string;
@@ -52,6 +53,100 @@ export function ApprovalPanel({ records, setRecords }: ApprovalPanelProps) {
   const approvedCount = records.filter(r => r._status === 'approved' || r._status === 'late_approved').length;
   const pendingCount = records.filter(r => r._status === 'pending').length;
 
+  const handleExportDGIC = () => {
+    if (!records || records.length === 0) return;
+    
+    const sortedRecords = [...records].sort((a, b) => {
+      const isARecommended = a._status === 'approved' || a._status === 'late_approved' ? 0 : 1;
+      const isBRecommended = b._status === 'approved' || b._status === 'late_approved' ? 0 : 1;
+      return isARecommended - isBRecommended;
+    });
+
+    let html = '<table border="1"><thead><tr>';
+    const headers = Object.keys(records[0]).filter(k => !k.startsWith('_'));
+    headers.push('DECission');
+    
+    headers.forEach(h => {
+      html += `<th style="background-color: #f3f4f6; font-weight: bold;">${h}</th>`;
+    });
+    html += '</tr></thead><tbody>';
+    
+    sortedRecords.forEach(row => {
+      const isLate = row._status === 'late_approved';
+      const rowStyle = isLate ? ' style="background-color: #fee2e2; color: #991b1b;"' : '';
+      
+      html += `<tr${rowStyle}>`;
+      headers.forEach(h => {
+        if (h === 'DECission') {
+          let decision = '';
+          if (row._status === 'approved') decision = 'Recommended';
+          else if (row._status === 'late_approved') decision = 'Recommended (Late)';
+          else if (row._status === 'rejected') decision = 'Not Recommended';
+          else decision = 'Pending';
+          html += `<td>${decision}</td>`;
+        } else {
+          html += `<td>${row[h] || ''}</td>`;
+        }
+      });
+      html += '</tr>';
+    });
+    
+    html += '</tbody></table>';
+    
+    const blob = new Blob([html], { type: 'application/vnd.ms-excel' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'DG_IC_Approval_File.xls';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExportAccountOffice = () => {
+    if (!records || records.length === 0) return;
+    const nameKey = Object.keys(records[0]).find(k => k.toLowerCase().includes('name') && !k.toLowerCase().includes('teacher')) || 'Name';
+    
+    const filtered = records
+      .filter(r => r._status === 'approved' || r._status === 'late_approved')
+      .sort((a, b) => String(a[nameKey] || '').localeCompare(String(b[nameKey] || '')))
+      .map(r => {
+        const newRow: any = {};
+        Object.keys(r).forEach(k => {
+          if (!k.startsWith('_')) newRow[k] = r[k];
+        });
+        newRow['DECission'] = 'Recommended';
+        return newRow;
+      });
+      
+    const ws = XLSX.utils.json_to_sheet(filtered);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Account Office');
+    XLSX.writeFile(wb, 'Account_Office_File.xlsx');
+  };
+
+  const handleExportDepartment = () => {
+    if (!records || records.length === 0) return;
+    const remarksKey = Object.keys(records[0]).find(k => k.toLowerCase().includes('remark') || k.toLowerCase().includes('reason'));
+    
+    const filtered = records
+      .filter(r => r._status === 'approved' || r._status === 'late_approved')
+      .map(r => {
+        const newRow: any = {};
+        Object.keys(r).forEach(k => {
+          if (!k.startsWith('_') && k !== remarksKey) {
+            newRow[k] = r[k];
+          }
+        });
+        newRow['DECission'] = 'Recommended';
+        return newRow;
+      });
+      
+    const ws = XLSX.utils.json_to_sheet(filtered);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Department');
+    XLSX.writeFile(wb, 'Department_File.xlsx');
+  };
+
   return (
     <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex flex-col h-full min-h-[500px]">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 border-b border-gray-100 pb-4">
@@ -68,6 +163,18 @@ export function ApprovalPanel({ records, setRecords }: ApprovalPanelProps) {
             {approvedCount} Approved
           </div>
         </div>
+      </div>
+
+      <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 mb-6">
+        <h4 className="font-semibold text-blue-900 mb-1 flex items-center gap-2">
+          <span className="bg-blue-200 text-blue-800 w-5 h-5 rounded-full flex items-center justify-center text-xs">i</span>
+          Quick Guide
+        </h4>
+        <ul className="text-sm text-blue-800 list-disc list-inside space-y-1 ml-1">
+          <li>Type a student's Enrollment Number in the search box below.</li>
+          <li>Click <strong>Approve</strong> for normal cases, or <strong>Late Approve</strong> for delayed cases.</li>
+          <li>Only the approved courses will be included in the final datesheet.</li>
+        </ul>
       </div>
 
       <div className="relative mb-6">
@@ -168,6 +275,35 @@ export function ApprovalPanel({ records, setRecords }: ApprovalPanelProps) {
             <p className="text-sm mt-1">Search an enrollment number above to begin.</p>
           </div>
         )}
+      </div>
+
+      {/* Standalone Export Buttons */}
+      <div className="mt-6 pt-6 border-t border-gray-100">
+        <h4 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-3">Download Approval Files</h4>
+        <p className="text-xs text-gray-500 mb-4">You can download these files right now without generating a datesheet.</p>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <button
+            onClick={handleExportDGIC}
+            className="flex items-center justify-center gap-2 px-3 py-2 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors text-sm font-medium"
+          >
+            <Building2 className="w-4 h-4" />
+            DG IC File
+          </button>
+          <button
+            onClick={handleExportAccountOffice}
+            className="flex items-center justify-center gap-2 px-3 py-2 bg-purple-50 text-purple-700 border border-purple-200 rounded-lg hover:bg-purple-100 transition-colors text-sm font-medium"
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            Account Office
+          </button>
+          <button
+            onClick={handleExportDepartment}
+            className="flex items-center justify-center gap-2 px-3 py-2 bg-orange-50 text-orange-700 border border-orange-200 rounded-lg hover:bg-orange-100 transition-colors text-sm font-medium"
+          >
+            <FileText className="w-4 h-4" />
+            Department File
+          </button>
+        </div>
       </div>
     </div>
   );

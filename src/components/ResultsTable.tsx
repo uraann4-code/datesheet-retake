@@ -130,45 +130,20 @@ export function ResultsTable({
   const headers = Object.keys(data[0]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* Top Action Bar */}
-      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-        <div>
-          <h2 className="text-xl font-bold text-gray-800">Schedule Generated Successfully!</h2>
-          <p className="text-sm text-gray-500">Review the summary below or download the required files.</p>
-        </div>
-        <div className="flex flex-wrap gap-2 w-full lg:w-auto">
+      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div>
+            <h2 className="text-2xl font-bold text-gray-800">Schedule Generated Successfully! 🎉</h2>
+            <p className="text-gray-500 mt-1">Review the summary below and download your final datesheet.</p>
+          </div>
           <button
             onClick={handleExportDatesheet}
-            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-all shadow-sm font-medium text-sm flex-1 sm:flex-none justify-center"
-            title="Download the final datesheet"
+            className="flex items-center gap-2 px-6 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-all shadow-md hover:shadow-lg font-bold text-base w-full sm:w-auto justify-center"
           >
-            <CalendarDays className="w-4 h-4" />
-            Datesheet
-          </button>
-          <button
-            onClick={handleExportDGIC}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all shadow-sm font-medium text-sm flex-1 sm:flex-none justify-center"
-            title="All cases with reasons (Late approvals highlighted)"
-          >
-            <Building2 className="w-4 h-4" />
-            DG IC File
-          </button>
-          <button
-            onClick={handleExportAccountOffice}
-            className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-all shadow-sm font-medium text-sm flex-1 sm:flex-none justify-center"
-            title="Only recommended cases sorted by Name"
-          >
-            <FileSpreadsheet className="w-4 h-4" />
-            Account Office
-          </button>
-          <button
-            onClick={handleExportDepartment}
-            className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-all shadow-sm font-medium text-sm flex-1 sm:flex-none justify-center"
-            title="Only recommended cases without reasons"
-          >
-            <FileText className="w-4 h-4" />
-            Department File
+            <CalendarDays className="w-5 h-5" />
+            Download Datesheet
           </button>
         </div>
       </div>

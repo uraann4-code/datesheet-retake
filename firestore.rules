@@ -1,0 +1,85 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    // Collection: users
+    // Document ID: {userId}
+    // Fields:
+    //   - email: string (required)
+    //   - role: string (required, 'admin' | 'user')
+    //   - createdAt: string (required, ISO date)
+    //
+    // Collection: workspaces
+    // Document ID: {workspaceId}
+    // Fields:
+    //   - name: string (required)
+    //   - ownerId: string (required)
+    //   - createdAt: string (required, ISO date)
+    //   - updatedAt: string (required, ISO date)
+    //
+    // Collection: workspaces/{workspaceId}/records
+    // Document ID: {recordId}
+    // Fields:
+    //   - workspaceId: string (required)
+    //   - _status: string (required, 'pending' | 'approved' | 'late_approved' | 'rejected')
+    //   - originalData: string (required, JSON)
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isValidDateString(dateStr) {
+      return dateStr is string &&
+        dateStr.matches("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}.*Z?$");
+    }
+
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) && 
+        request.resource.data.keys().hasAll(['email', 'role', 'createdAt']) && 
+        request.resource.data.role in ['admin', 'user'] &&
+        isValidDateString(request.resource.data.createdAt);
+      allow update: if isOwner(userId) && 
+        request.resource.data.role == resource.data.role; // Cannot change own role
+    }
+
+    match /workspaces/{workspaceId} {
+      allow read: if isAuthenticated() && resource.data.ownerId == request.auth.uid;
+      allow create: if isAuthenticated() && 
+        request.resource.data.keys().hasAll(['name', 'ownerId', 'createdAt', 'updatedAt']) &&
+        request.resource.data.ownerId == request.auth.uid &&
+        request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() < 100 &&
+        isValidDateString(request.resource.data.createdAt) &&
+        isValidDateString(request.resource.data.updatedAt);
+      allow update: if isAuthenticated() && 
+        resource.data.ownerId == request.auth.uid && 
+        request.resource.data.ownerId == request.auth.uid &&
+        request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() < 100 &&
+        isValidDateString(request.resource.data.updatedAt);
+      allow delete: if isAuthenticated() && resource.data.ownerId == request.auth.uid;
+      
+      match /records/{recordId} {
+        allow read: if isAuthenticated() && get(/databases/$(database)/documents/workspaces/$(workspaceId)).data.ownerId == request.auth.uid;
+        allow create: if isAuthenticated() && 
+          get(/databases/$(database)/documents/workspaces/$(workspaceId)).data.ownerId == request.auth.uid &&
+          request.resource.data.keys().hasAll(['workspaceId', '_status', 'originalData']) &&
+          request.resource.data.workspaceId == workspaceId &&
+          request.resource.data._status in ['pending', 'approved', 'late_approved', 'rejected'] &&
+          request.resource.data.originalData is string && request.resource.data.originalData.size() < 10000;
+        allow update: if isAuthenticated() && 
+          get(/databases/$(database)/documents/workspaces/$(workspaceId)).data.ownerId == request.auth.uid &&
+          request.resource.data.workspaceId == workspaceId &&
+          request.resource.data._status in ['pending', 'approved', 'late_approved', 'rejected'] &&
+          request.resource.data.originalData is string && request.resource.data.originalData.size() < 10000;
+        allow delete: if isAuthenticated() && get(/databases/$(database)/documents/workspaces/$(workspaceId)).data.ownerId == request.auth.uid;
+      }
+    }
+  }
+}

@@ -1,0 +1,52 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "A user of the application",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "format": "email" },
+        "role": { "type": "string", "enum": ["admin", "user"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["email", "role", "createdAt"]
+    },
+    "Workspace": {
+      "title": "Workspace",
+      "description": "A workspace for generating a datesheet",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "ownerId", "createdAt", "updatedAt"]
+    },
+    "Record": {
+      "title": "Record",
+      "description": "A student enrollment record",
+      "type": "object",
+      "properties": {
+        "workspaceId": { "type": "string" },
+        "_status": { "type": "string", "enum": ["pending", "approved", "late_approved", "rejected"] },
+        "originalData": { "type": "string", "description": "JSON stringified original row data" }
+      },
+      "required": ["workspaceId", "_status", "originalData"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "User profiles"
+    },
+    "workspaces/{workspaceId}": {
+      "schema": { "$ref": "#/entities/Workspace" },
+      "description": "Workspaces for datesheet generation"
+    },
+    "workspaces/{workspaceId}/records/{recordId}": {
+      "schema": { "$ref": "#/entities/Record" },
+      "description": "Records within a workspace"
+    }
+  }
+}
