@@ -16,8 +16,46 @@ export function FileUpload({ onDataLoaded, isLoading }: FileUploadProps) {
 
   const processSheet = (wb: XLSX.WorkBook, sheetName: string) => {
     const worksheet = wb.Sheets[sheetName];
-    const json = XLSX.utils.sheet_to_json(worksheet);
-    onDataLoaded(json);
+    const initialJson: any[] = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+    
+    // Forward fill logic for merged cells
+    if (initialJson.length === 0) {
+      onDataLoaded([]);
+      return;
+    }
+
+    const processedJson: any[] = [];
+    let lastValidRow: any = { ...initialJson[0] };
+
+    for (let i = 0; i < initialJson.length; i++) {
+      const currentRow = initialJson[i];
+      const newRow = { ...currentRow };
+
+      // Identify columns that should definitely NOT be forward filled (usually the "Subject" or "Course" related ones)
+      // Actually, it's safer to forward fill identifiers if they are empty
+      // We look for columns like Enrollment, Name, etc.
+      
+      const keys = Object.keys(currentRow);
+      let hasData = false;
+
+      keys.forEach(key => {
+        const val = String(currentRow[key]).trim();
+        if (val !== "") {
+          hasData = true;
+          lastValidRow[key] = currentRow[key]; // Update the "last seen" value for this column
+        } else {
+          // If empty, fill with last valid value
+          // We only fill if some other part of the row has data (indicating it's part of a merged group)
+          newRow[key] = lastValidRow[key];
+        }
+      });
+
+      if (hasData) {
+        processedJson.push(newRow);
+      }
+    }
+
+    onDataLoaded(processedJson);
   };
 
   const handleFileUpload = useCallback(

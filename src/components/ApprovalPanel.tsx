@@ -13,9 +13,10 @@ interface ApprovalPanelProps {
   records: ApprovableRecord[];
   setRecords: React.Dispatch<React.SetStateAction<ApprovableRecord[]>>;
   workspaceId: string | null;
+  examType?: 'mid' | 'final';
 }
 
-export function ApprovalPanel({ records, setRecords, workspaceId }: ApprovalPanelProps) {
+export function ApprovalPanel({ records, setRecords, workspaceId, examType }: ApprovalPanelProps) {
   const [searchQuery, setSearchQuery] = useState('');
 
   // Find enrollment and course keys for display
@@ -104,8 +105,12 @@ export function ApprovalPanel({ records, setRecords, workspaceId }: ApprovalPane
       };
     });
 
+    const title = examType === 'mid'
+      ? 'Retake Applications of Mid Term Exam - Fall - 2024'
+      : 'Retake Applications of Final Term Exam - Fall - 2024';
+
     // Create worksheet starting with title
-    const ws = XLSX.utils.aoa_to_sheet([['Retake Applications of Final Term Exam - Fall - 2024']]);
+    const ws = XLSX.utils.aoa_to_sheet([[title]]);
     
     // Add data starting at A2
     XLSX.utils.sheet_add_json(ws, exportData, { origin: 'A2' });

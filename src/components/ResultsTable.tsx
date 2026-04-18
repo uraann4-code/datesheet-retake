@@ -10,6 +10,7 @@ interface ResultsTableProps {
   totalCourses: number;
   totalStudents: number;
   unresolvedConflicts: { student: string; course1: string; course2: string }[];
+  examType?: 'mid' | 'final';
 }
 
 export function ResultsTable({
@@ -19,6 +20,7 @@ export function ResultsTable({
   totalCourses,
   totalStudents,
   unresolvedConflicts,
+  examType,
 }: ResultsTableProps) {
   const handleExportDatesheet = () => {
     if (!data || data.length === 0) return;
@@ -57,7 +59,10 @@ export function ResultsTable({
     });
 
     // Create worksheet starting with title
-    const ws = XLSX.utils.aoa_to_sheet([['RE-TAKE FINAL EXAM FALL 2025 SEMESTER']]);
+    const title = examType === 'mid' 
+      ? 'RE-TAKE MID EXAM FALL 2025 SEMESTER' 
+      : 'RE-TAKE FINAL EXAM FALL 2025 SEMESTER';
+    const ws = XLSX.utils.aoa_to_sheet([[title]]);
     
     // Add data starting at A2
     XLSX.utils.sheet_add_json(ws, exportData, { origin: 'A2' });
@@ -115,8 +120,12 @@ export function ResultsTable({
       };
     });
 
+    const title = examType === 'mid'
+      ? 'Retake Applications of Mid Term Exam - Fall - 2024'
+      : 'Retake Applications of Final Term Exam - Fall - 2024';
+
     // Create worksheet starting with title
-    const ws = XLSX.utils.aoa_to_sheet([['Retake Applications of Final Term Exam - Fall - 2024']]);
+    const ws = XLSX.utils.aoa_to_sheet([[title]]);
     
     // Add data starting at A2
     XLSX.utils.sheet_add_json(ws, exportData, { origin: 'A2' });

@@ -17,6 +17,8 @@ export interface ScheduledCourse extends Course {
   timeSlot?: TimeSlot;
 }
 
+export type ExamType = 'mid' | 'final';
+
 export interface ScheduleResult {
   datesheet: any[];
   scheduledCourses: ScheduledCourse[];
@@ -24,6 +26,7 @@ export interface ScheduleResult {
   totalCourses: number;
   totalStudents: number;
   unresolvedConflicts: { student: string; course1: string; course2: string }[];
+  examType?: ExamType;
 }
 
 export function generateSchedule(
@@ -32,7 +35,8 @@ export function generateSchedule(
   numDays: number,
   sessionsPerDay: number,
   skipWeekends: boolean = true,
-  previousResult: ScheduleResult | null = null
+  previousResult: ScheduleResult | null = null,
+  examType: ExamType = 'final'
 ): ScheduleResult {
   // 1. Identify columns globally
   const allKeys = new Set<string>();
@@ -172,6 +176,7 @@ export function generateSchedule(
 
   const scheduledCourses: ScheduledCourse[] = [];
   const slotAssignments = new Map<string, number>(); // courseCode -> slotIndex
+  const slotStudentCounts = new Array(timeSlots.length).fill(0); // For balancing Mid-term
 
   let totalClashes = 0;
   const unresolvedConflicts: { student: string; course1: string; course2: string }[] = [];
@@ -216,32 +221,57 @@ export function generateSchedule(
         }
       }
 
-      for (const i of preferredIndices) {
-        let hasConflict = false;
-        let currentSlotConflicts = 0;
-
-        const neighbors = conflicts.get(course.courseCode)!;
-        neighbors.forEach((neighbor) => {
-          if (slotAssignments.get(neighbor) === i) {
-            hasConflict = true;
-            currentSlotConflicts++;
-          }
+      // If Mid Term, we should consider slots with fewer students among valid slots
+      if (examType === 'mid' && !course.isMS) {
+        // Filter valid indices (those without conflict)
+        const validIndices = preferredIndices.filter(i => {
+          let hasConflict = false;
+          const neighbors = conflicts.get(course.courseCode)!;
+          neighbors.forEach((neighbor) => {
+            if (slotAssignments.get(neighbor) === i) {
+              hasConflict = true;
+            }
+          });
+          return !hasConflict;
         });
 
-        if (!hasConflict) {
-          assignedSlot = i;
-          break;
+        if (validIndices.length > 0) {
+          // Sort valid indices by current student count to balance
+          validIndices.sort((a, b) => slotStudentCounts[a] - slotStudentCounts[b]);
+          assignedSlot = validIndices[0];
+        } else {
+          // No perfect slot, will fall back to overlap logic
         }
+      } else {
+        // Final Term or MS (Packing strategy)
+        for (const i of preferredIndices) {
+          let hasConflict = false;
+          let currentSlotConflicts = 0;
 
-        if (currentSlotConflicts < minConflicts) {
-          minConflicts = currentSlotConflicts;
-          minConflictSlot = i;
+          const neighbors = conflicts.get(course.courseCode)!;
+          neighbors.forEach((neighbor) => {
+            if (slotAssignments.get(neighbor) === i) {
+              hasConflict = true;
+              currentSlotConflicts++;
+            }
+          });
+
+          if (!hasConflict) {
+            assignedSlot = i;
+            break;
+          }
+
+          if (currentSlotConflicts < minConflicts) {
+            minConflicts = currentSlotConflicts;
+            minConflictSlot = i;
+          }
         }
       }
     }
 
     if (assignedSlot !== -1) {
       slotAssignments.set(course.courseCode, assignedSlot);
+      slotStudentCounts[assignedSlot] += course.students.size;
       scheduledCourses.push({
         ...course,
         timeSlot: timeSlots[assignedSlot],
@@ -249,6 +279,7 @@ export function generateSchedule(
     } else if (minConflictSlot !== -1) {
       // If no slot without conflict is found, assign the one with minimum conflicts
       slotAssignments.set(course.courseCode, minConflictSlot);
+      slotStudentCounts[minConflictSlot] += course.students.size;
       scheduledCourses.push({
         ...course,
         timeSlot: timeSlots[minConflictSlot],
@@ -324,6 +355,7 @@ export function generateSchedule(
     totalClashes,
     totalCourses: courses.length,
     totalStudents: studentCourses.size,
-    unresolvedConflicts
+    unresolvedConflicts,
+    examType
   };
 }

@@ -3,7 +3,7 @@ import { FileUpload } from './FileUpload';
 import { ConfigurationPanel } from './ConfigurationPanel';
 import { ResultsTable } from './ResultsTable';
 import { ApprovalPanel, ApprovableRecord } from './ApprovalPanel';
-import { generateSchedule, ScheduleResult } from '../lib/scheduler';
+import { generateSchedule, ScheduleResult, ExamType } from '../lib/scheduler';
 import { CalendarDays, Plus, ArrowLeft, CheckCircle2, Cloud, FileSpreadsheet } from 'lucide-react';
 import { createWorkspace, loadWorkspaceById } from '../lib/db';
 
@@ -19,6 +19,7 @@ export function DatesheetGenerator({ workspaceId: initialWorkspaceId }: Dateshee
   const [workspaceId, setWorkspaceId] = useState<string | null>(initialWorkspaceId || null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [directSchedule, setDirectSchedule] = useState(false);
+  const [examType, setExamType] = useState<ExamType>('final');
   
   const [startDate, setStartDate] = useState<string>(
     new Date().toISOString().split('T')[0]
@@ -108,7 +109,8 @@ export function DatesheetGenerator({ workspaceId: initialWorkspaceId }: Dateshee
           numDays,
           sessionsPerDay,
           skipWeekends,
-          result // Pass the previous result here
+          result,
+          examType
         );
         setResult(scheduleResult);
       } catch (error) {
@@ -132,6 +134,7 @@ export function DatesheetGenerator({ workspaceId: initialWorkspaceId }: Dateshee
     setSkipWeekends(true);
     setStep('upload');
     setDirectSchedule(false);
+    setExamType('final');
   };
 
   const approvedCount = records.filter(r => r._status === 'approved' || r._status === 'late_approved').length;
@@ -219,6 +222,38 @@ export function DatesheetGenerator({ workspaceId: initialWorkspaceId }: Dateshee
                 1. Upload Data
               </h3>
               
+              <div className="mb-6 p-4 bg-gray-50 rounded-2xl border border-gray-200">
+                <p className="text-sm font-bold text-gray-700 mb-3">Exam Type Choice:</p>
+                <div className="space-y-3">
+                  <label className="flex items-center gap-3 cursor-pointer group">
+                    <input 
+                      type="radio" 
+                      name="examType" 
+                      checked={examType === 'final'} 
+                      onChange={() => setExamType('final')}
+                      className="w-4 h-4 text-blue-600"
+                    />
+                    <div className="flex-1">
+                      <p className="text-sm font-bold text-gray-900 group-hover:text-blue-600 transition-colors">Final Term Re-take</p>
+                      <p className="text-xs text-gray-500">Max students on first day strategy.</p>
+                    </div>
+                  </label>
+                  <label className="flex items-center gap-3 cursor-pointer group">
+                    <input 
+                      type="radio" 
+                      name="examType" 
+                      checked={examType === 'mid'} 
+                      onChange={() => setExamType('mid')}
+                      className="w-4 h-4 text-blue-600"
+                    />
+                    <div className="flex-1">
+                      <p className="text-sm font-bold text-gray-900 group-hover:text-blue-600 transition-colors">Mid Term Re-take</p>
+                      <p className="text-xs text-gray-500">Equal student distribution per session.</p>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
               <div className="mb-6 p-4 bg-gray-50 rounded-2xl border border-gray-200">
                 <p className="text-sm font-bold text-gray-700 mb-3">Workflow Choice:</p>
                 <div className="space-y-3">
@@ -339,6 +374,7 @@ export function DatesheetGenerator({ workspaceId: initialWorkspaceId }: Dateshee
                 records={records} 
                 setRecords={setRecords}
                 workspaceId={workspaceId}
+                examType={examType}
               />
             )}
 
@@ -383,6 +419,7 @@ export function DatesheetGenerator({ workspaceId: initialWorkspaceId }: Dateshee
                       totalCourses={result.totalCourses}
                       totalStudents={result.totalStudents}
                       unresolvedConflicts={result.unresolvedConflicts}
+                      examType={examType}
                     />
                   )
                 ) : null}
