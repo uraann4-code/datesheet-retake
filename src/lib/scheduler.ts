@@ -44,8 +44,8 @@ export function generateSchedule(
   };
 
   const enrollmentKey = findKey(['enrollment', 'registration', 'studentid', 'regno', 'rollno']);
-  const courseCodeKey = findKey(['coursecode', 'subjectcode']) || findKey(['course']);
-  const subjectKey = findKey(['subject', 'coursename', 'coursetitle']);
+  const subjectKey = findKey(['subject', 'coursename', 'coursetitle', 'course']);
+  const courseCodeKey = findKey(['coursecode', 'subjectcode']);
   const teacherKey = findKey(['teacher', 'instructor', 'faculty']);
   const programKey = findKey(['program', 'degree', 'class', 'department']);
 
@@ -56,24 +56,24 @@ export function generateSchedule(
   // Standardize records
   const standardizedRecords = records.map(record => {
     const enrollment = enrollmentKey ? String(record[enrollmentKey] || '').trim() : '';
-    let courseCode = courseCodeKey ? String(record[courseCodeKey] || '').trim() : '';
     const subject = subjectKey ? String(record[subjectKey] || '').trim() : '';
+    let courseCode = courseCodeKey ? String(record[courseCodeKey] || '').trim() : '';
     const teacherName = teacherKey ? String(record[teacherKey] || '').trim() : '';
     const program = programKey ? String(record[programKey] || '').trim() : '';
 
-    if (!courseCode && subject) {
-      courseCode = subject;
-    }
-
-    const normalizedCourseCode = courseCode.toUpperCase();
+    // If we have a subject but no explicit course code, use subject as code
+    // Or if the user wants to group by subject, we treat subject as the primary identifier
+    const primaryId = (subject || courseCode || 'UNKNOWN').trim();
+    const normalizedPrimaryId = primaryId.toUpperCase();
+    
     const isMS = /\b(MS|MBA|MPhil|Masters?)\b/i.test(program) || /MS\s*\(/.test(program);
 
     return {
       original: record,
       enrollment,
-      courseCode: normalizedCourseCode,
-      originalCourseCode: courseCode,
-      subject,
+      courseCode: normalizedPrimaryId, // Using primaryId (usually Subject) for grouping
+      displayCourseCode: courseCode || normalizedPrimaryId,
+      subject: subject || courseCode,
       teacherName,
       isMS
     };
@@ -84,8 +84,8 @@ export function generateSchedule(
 
     if (!coursesMap.has(record.courseCode)) {
       coursesMap.set(record.courseCode, {
-        courseCode: record.courseCode,
-        subject: record.subject || record.originalCourseCode,
+        courseCode: record.displayCourseCode, // Use the actual code if exists for display
+        subject: record.subject,
         students: new Set(),
         teacherName: record.teacherName,
         isMS: record.isMS,

@@ -272,9 +272,9 @@ export function DatesheetGenerator({ workspaceId: initialWorkspaceId }: Dateshee
               <div className="space-y-2">
                 {[
                   { name: 'Enrollment', desc: 'Registration # (Required)', req: true },
-                  { name: 'Course Code', desc: 'Subject Code (Required)', req: true },
+                  { name: 'Subject', desc: 'Course Title (Required for scheduling)', req: true },
+                  { name: 'Course Code', desc: 'Subject Code', req: false },
                   { name: 'Name', desc: 'Student Name', req: false },
-                  { name: 'Subject', desc: 'Course Title', req: false },
                   { name: 'Program', desc: 'Class/Degree', req: false },
                   { name: 'Teacher Name', desc: 'Instructor', req: false },
                 ].map((col) => (
