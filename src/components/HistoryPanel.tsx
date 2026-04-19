@@ -28,8 +28,15 @@ export function HistoryPanel({ onLoadWorkspace, currentWorkspaceId }: HistoryPan
   const handleDelete = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
     if (window.confirm('Are you sure you want to delete this history?')) {
-      await deleteWorkspace(id);
-      fetchWorkspaces();
+      // Optimistic update: remove from UI immediately
+      setWorkspaces(prev => prev.filter(ws => ws.id !== id));
+      
+      // Perform deletion in background
+      deleteWorkspace(id).catch(err => {
+        console.error("Failed to delete history:", err);
+        // If it fails, refresh the list
+        fetchWorkspaces();
+      });
     }
   };
 

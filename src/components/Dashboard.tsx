@@ -30,9 +30,15 @@ export function Dashboard({ onSelectWorkspace, onStartNew }: DashboardProps) {
   const handleDelete = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
     if (window.confirm('Are you sure you want to delete this historical record? This action cannot be undone.')) {
-      setLoading(true);
-      await deleteWorkspace(id);
-      await fetchWorkspaces();
+      // Optimistic update: remove from UI immediately
+      setWorkspaces(prev => prev.filter(ws => ws.id !== id));
+      
+      // Perform deletion in background
+      deleteWorkspace(id).catch(err => {
+        console.error("Failed to delete workspace:", err);
+        // If it fails, refresh the list to show the record again
+        fetchWorkspaces();
+      });
     }
   };
 
