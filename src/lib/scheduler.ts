@@ -47,9 +47,9 @@ export function generateSchedule(
     return keys.find(k => searchTerms.some(term => k.toLowerCase().replace(/[\s_]+/g, '').includes(term.toLowerCase().replace(/[\s_]+/g, ''))));
   };
 
-  const enrollmentKey = findKey(['enrollment', 'registration', 'studentid', 'regno', 'rollno', 'reg#', 'reg']);
-  const subjectKey = findKey(['subject', 'coursename', 'coursetitle', 'course', 'sub']);
-  const courseCodeKey = findKey(['coursecode', 'subjectcode', 'code']);
+  const enrollmentKey = findKey(['enrollment', 'registration', 'studentid', 'regno', 'rollno', 'reg#', 'reg', 'roll', 'student', 'id']);
+  const subjectKey = findKey(['subject', 'coursename', 'coursetitle', 'course', 'sub', 'paper', 'title']);
+  const courseCodeKey = findKey(['coursecode', 'subjectcode', 'code', 'ccode']);
   const teacherKey = findKey(['teacher', 'instructor', 'faculty']);
   const programKey = findKey(['program', 'degree', 'class', 'department']);
 

@@ -4,7 +4,7 @@ import { ConfigurationPanel } from './ConfigurationPanel';
 import { ResultsTable } from './ResultsTable';
 import { ApprovalPanel, ApprovableRecord } from './ApprovalPanel';
 import { generateSchedule, ScheduleResult, ExamType } from '../lib/scheduler';
-import { CalendarDays, Plus, ArrowLeft, CheckCircle2, Cloud, FileSpreadsheet, AlertTriangle } from 'lucide-react';
+import { CalendarDays, Plus, ArrowLeft, CheckCircle2, Cloud, FileSpreadsheet, AlertTriangle, X } from 'lucide-react';
 import { createWorkspace, loadWorkspaceById } from '../lib/db';
 
 type Step = 'upload' | 'approve' | 'results';
@@ -410,16 +410,40 @@ export function DatesheetGenerator({ workspaceId: initialWorkspaceId }: Dateshee
                       <p className="text-gray-500 max-w-md mx-auto leading-relaxed">
                         We couldn't identify the required columns in your Excel file. Please ensure your file has columns for <strong>Enrollment (Reg #)</strong> and <strong>Subject</strong>.
                       </p>
-                      <div className="mt-6 p-4 bg-gray-50 rounded-2xl border border-gray-200 max-w-sm mx-auto text-left">
-                        <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Checklist:</p>
+                      <div className="mt-6 p-4 bg-gray-50 rounded-2xl border border-gray-200 max-w-md mx-auto text-left">
+                        <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Detected Columns in File:</p>
+                        <div className="flex flex-wrap gap-2 mb-4">
+                          {records.length > 0 && Object.keys(records[0]).filter(k => !k.startsWith('_')).map(key => (
+                            <span key={key} className="text-[10px] bg-white border border-gray-200 px-2 py-1 rounded-md text-gray-500 font-mono">
+                              {key}
+                            </span>
+                          ))}
+                        </div>
+                        <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Required Checklist:</p>
                         <ul className="text-sm text-gray-600 space-y-2">
                           <li className="flex items-center gap-2">
-                            <CheckCircle2 className="w-4 h-4 text-green-500" /> Enrollment / Registration column exists?
+                            {records.length > 0 && Object.keys(records[0]).some(k => k.toLowerCase().match(/enrollment|reg|registration|studentid|rollno|reg#|roll|student|id/)) ? (
+                              <CheckCircle2 className="w-4 h-4 text-green-500" />
+                            ) : (
+                              <X className="w-4 h-4 text-red-500" />
+                            )}
+                            Enrollment / Registration column?
                           </li>
                           <li className="flex items-center gap-2">
-                            <CheckCircle2 className="w-4 h-4 text-green-500" /> Subject / Course Name column exists?
+                            {records.length > 0 && Object.keys(records[0]).some(k => k.toLowerCase().match(/subject|course|coursename|coursetitle|sub|paper|title/)) ? (
+                              <CheckCircle2 className="w-4 h-4 text-green-500" />
+                            ) : (
+                              <X className="w-4 h-4 text-red-500" />
+                            )}
+                            Subject / Course Title column?
                           </li>
                         </ul>
+                        <button 
+                          onClick={handleReset}
+                          className="mt-6 w-full py-2 bg-blue-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all"
+                        >
+                          Try Different File
+                        </button>
                       </div>
                     </div>
                   ) : (

@@ -25,25 +25,31 @@ export function FileUpload({ onDataLoaded, isLoading }: FileUploadProps) {
       return;
     }
 
-    // Find the header row (the one that contains keywords like enrollment or subject)
-    let headerIndex = -1;
-    for (let i = 0; i < Math.min(rows.length, 10); i++) {
+    // Find the best header row by counting keyword matches
+    let bestHeaderIndex = 0;
+    let maxMatches = 0;
+    
+    // Scan more rows (up to 20) for better reliability
+    for (let i = 0; i < Math.min(rows.length, 20); i++) {
       const row = rows[i];
-      const hasEnrollment = row.some(cell => String(cell).toLowerCase().match(/enrollment|reg|registration/));
-      const hasSubject = row.some(cell => String(cell).toLowerCase().match(/subject|course|code/));
+      let matches = 0;
       
-      if (hasEnrollment || hasSubject) {
-        headerIndex = i;
-        break;
+      const rowStr = row.map(cell => String(cell).toLowerCase()).join(' ');
+      
+      // Keywords for high confidence headers
+      if (rowStr.match(/enrollment|reg|registration|studentid|rollno|reg#/)) matches += 2;
+      if (rowStr.match(/subject|course|coursename|coursetitle|sub/)) matches += 2;
+      if (rowStr.match(/code|id|name|teacher|program|class/)) matches += 1;
+      
+      if (matches > maxMatches) {
+        maxMatches = matches;
+        bestHeaderIndex = i;
       }
     }
 
-    // If no header found, default to first row
-    const effectiveHeaderIndex = headerIndex === -1 ? 0 : headerIndex;
-    
-    // Convert to JSON using the found header row
+    // Convert to JSON using the best found header row
     const initialJson: any[] = XLSX.utils.sheet_to_json(worksheet, { 
-      range: effectiveHeaderIndex,
+      range: bestHeaderIndex,
       defval: "" 
     });
     
