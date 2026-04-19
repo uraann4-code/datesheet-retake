@@ -16,7 +16,36 @@ export function FileUpload({ onDataLoaded, isLoading }: FileUploadProps) {
 
   const processSheet = (wb: XLSX.WorkBook, sheetName: string) => {
     const worksheet = wb.Sheets[sheetName];
-    const initialJson: any[] = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+    
+    // Read as array of arrays first to find the header row
+    const rows: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
+    
+    if (rows.length === 0) {
+      onDataLoaded([]);
+      return;
+    }
+
+    // Find the header row (the one that contains keywords like enrollment or subject)
+    let headerIndex = -1;
+    for (let i = 0; i < Math.min(rows.length, 10); i++) {
+      const row = rows[i];
+      const hasEnrollment = row.some(cell => String(cell).toLowerCase().match(/enrollment|reg|registration/));
+      const hasSubject = row.some(cell => String(cell).toLowerCase().match(/subject|course|code/));
+      
+      if (hasEnrollment || hasSubject) {
+        headerIndex = i;
+        break;
+      }
+    }
+
+    // If no header found, default to first row
+    const effectiveHeaderIndex = headerIndex === -1 ? 0 : headerIndex;
+    
+    // Convert to JSON using the found header row
+    const initialJson: any[] = XLSX.utils.sheet_to_json(worksheet, { 
+      range: effectiveHeaderIndex,
+      defval: "" 
+    });
     
     // Forward fill logic for merged cells
     if (initialJson.length === 0) {
@@ -31,21 +60,16 @@ export function FileUpload({ onDataLoaded, isLoading }: FileUploadProps) {
       const currentRow = initialJson[i];
       const newRow = { ...currentRow };
 
-      // Identify columns that should definitely NOT be forward filled (usually the "Subject" or "Course" related ones)
-      // Actually, it's safer to forward fill identifiers if they are empty
-      // We look for columns like Enrollment, Name, etc.
-      
       const keys = Object.keys(currentRow);
       let hasData = false;
 
       keys.forEach(key => {
         const val = String(currentRow[key]).trim();
+        // Skip keys that look like "Sr #" or index if they are empty
         if (val !== "") {
           hasData = true;
-          lastValidRow[key] = currentRow[key]; // Update the "last seen" value for this column
+          lastValidRow[key] = currentRow[key];
         } else {
-          // If empty, fill with last valid value
-          // We only fill if some other part of the row has data (indicating it's part of a merged group)
           newRow[key] = lastValidRow[key];
         }
       });

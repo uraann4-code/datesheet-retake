@@ -4,7 +4,7 @@ import { ConfigurationPanel } from './ConfigurationPanel';
 import { ResultsTable } from './ResultsTable';
 import { ApprovalPanel, ApprovableRecord } from './ApprovalPanel';
 import { generateSchedule, ScheduleResult, ExamType } from '../lib/scheduler';
-import { CalendarDays, Plus, ArrowLeft, CheckCircle2, Cloud, FileSpreadsheet } from 'lucide-react';
+import { CalendarDays, Plus, ArrowLeft, CheckCircle2, Cloud, FileSpreadsheet, AlertTriangle } from 'lucide-react';
 import { createWorkspace, loadWorkspaceById } from '../lib/db';
 
 type Step = 'upload' | 'approve' | 'results';
@@ -395,21 +395,32 @@ export function DatesheetGenerator({ workspaceId: initialWorkspaceId }: Dateshee
                       Generating optimal schedule...
                     </p>
                     <p className="text-sm text-gray-400 mt-2">
-                      Scheduling {approvedCount} approved courses.
+                      Scheduling {approvedCount} approved subjects.
                     </p>
                   </div>
                 ) : result ? (
                   result.totalCourses === 0 ? (
                     <div className="h-[500px] flex flex-col items-center justify-center bg-white rounded-xl shadow-sm border border-red-100 text-center p-8">
                       <div className="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center mb-4">
-                        <span className="text-4xl">⚠️</span>
+                        <AlertTriangle className="w-10 h-10 text-red-500" />
                       </div>
                       <h3 className="text-xl font-semibold text-gray-700 mb-2">
-                        No Courses Found
+                        No Subjects Found
                       </h3>
-                      <p className="text-gray-500 max-w-md">
-                        We couldn't find the required columns in your Excel file. Please ensure your file has columns for <strong>Enrollment</strong> and <strong>Course Code</strong>.
+                      <p className="text-gray-500 max-w-md mx-auto leading-relaxed">
+                        We couldn't identify the required columns in your Excel file. Please ensure your file has columns for <strong>Enrollment (Reg #)</strong> and <strong>Subject</strong>.
                       </p>
+                      <div className="mt-6 p-4 bg-gray-50 rounded-2xl border border-gray-200 max-w-sm mx-auto text-left">
+                        <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Checklist:</p>
+                        <ul className="text-sm text-gray-600 space-y-2">
+                          <li className="flex items-center gap-2">
+                            <CheckCircle2 className="w-4 h-4 text-green-500" /> Enrollment / Registration column exists?
+                          </li>
+                          <li className="flex items-center gap-2">
+                            <CheckCircle2 className="w-4 h-4 text-green-500" /> Subject / Course Name column exists?
+                          </li>
+                        </ul>
+                      </div>
                     </div>
                   ) : (
                     <ResultsTable
