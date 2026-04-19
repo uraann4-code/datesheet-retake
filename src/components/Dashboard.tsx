@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Plus, History, Calendar, FileText, ChevronRight, Clock, Trash2 } from 'lucide-react';
-import { loadAllWorkspaces } from '../lib/db';
+import { loadAllWorkspaces, deleteWorkspace } from '../lib/db';
 import { format } from 'date-fns';
 
 interface DashboardProps {
@@ -12,24 +12,37 @@ export function Dashboard({ onSelectWorkspace, onStartNew }: DashboardProps) {
   const [workspaces, setWorkspaces] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const fetchWorkspaces = async () => {
+    try {
+      const data = await loadAllWorkspaces();
+      setWorkspaces(data);
+    } catch (err) {
+      console.error("Dashboard error:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const fetchWorkspaces = async () => {
-      try {
-        const data = await loadAllWorkspaces();
-        setWorkspaces(data);
-      } catch (err) {
-        console.error("Dashboard error:", err);
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchWorkspaces();
   }, []);
 
+  const handleDelete = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    if (window.confirm('Are you sure you want to delete this historical record? This action cannot be undone.')) {
+      setLoading(true);
+      await deleteWorkspace(id);
+      await fetchWorkspaces();
+    }
+  };
+
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      <div className="flex items-center justify-center py-20">
+        <div className="flex flex-col items-center gap-4">
+          <div className="animate-spin rounded-full h-10 w-10 border-4 border-blue-100 border-t-blue-600"></div>
+          <p className="text-sm font-bold text-gray-400 uppercase tracking-widest">Loading Records...</p>
+        </div>
       </div>
     );
   }
@@ -87,7 +100,14 @@ export function Dashboard({ onSelectWorkspace, onStartNew }: DashboardProps) {
                       </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-4">
+                    <button
+                      onClick={(e) => handleDelete(e, ws.id)}
+                      className="p-2.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-2xl transition-all"
+                      title="Delete History"
+                    >
+                      <Trash2 className="w-5 h-5" />
+                    </button>
                     <ChevronRight className="w-5 h-5 text-gray-300 group-hover:text-blue-600 group-hover:translate-x-1 transition-all" />
                   </div>
                 </div>

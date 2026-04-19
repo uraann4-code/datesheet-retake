@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { DatesheetGenerator } from './components/DatesheetGenerator';
 import { Dashboard } from './components/Dashboard';
 import { db, auth } from './lib/firebase';
+import { HistoryPanel } from './components/HistoryPanel';
 import { 
   onAuthStateChanged, 
   signInWithEmailAndPassword, 
@@ -191,13 +192,20 @@ export default function App() {
           </div>
           
           {(currentWorkspaceId || isStartingNew) && (
-            <button
-              onClick={handleGoBack}
-              className="flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-blue-600 transition-colors px-4 py-2 rounded-xl hover:bg-blue-50"
-            >
-              <LayoutDashboard className="w-4 h-4" />
-              History
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleGoBack}
+                className="flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-blue-600 transition-colors px-4 py-2 rounded-xl hover:bg-blue-50"
+              >
+                <LayoutDashboard className="w-4 h-4" />
+                Dashboard
+              </button>
+              <div className="w-[1px] h-4 bg-gray-200 mx-1" />
+              <HistoryPanel 
+                onLoadWorkspace={handleSelectWorkspace} 
+                currentWorkspaceId={currentWorkspaceId} 
+              />
+            </div>
           )}
         </div>
         

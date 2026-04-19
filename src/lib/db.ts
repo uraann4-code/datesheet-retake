@@ -1,5 +1,5 @@
 import { db, auth } from './firebase';
-import { collection, doc, writeBatch, getDocs, updateDoc, setDoc, getDoc, query, where } from 'firebase/firestore';
+import { collection, doc, writeBatch, getDocs, updateDoc, setDoc, getDoc, query, where, deleteDoc } from 'firebase/firestore';
 import { ApprovableRecord } from '../components/ApprovalPanel';
 
 export enum OperationType {
@@ -181,9 +181,31 @@ export const loadWorkspaceById = async (workspaceId: string): Promise<{workspace
 
 export const deleteWorkspace = async (workspaceId: string) => {
   if (!auth.currentUser || !workspaceId) return;
-  // Note: In a real app, we'd delete subcollections too. 
-  // For this prototype, we'll just delete the main doc or leave it.
-  // Security rules allow delete.
+  const path = `workspaces/${workspaceId}`;
+  
+  try {
+    // Delete all records in the subcollection first
+    const recordsRef = collection(db, 'workspaces', workspaceId, 'records');
+    const recordsSnap = await getDocs(recordsRef);
+    
+    const chunks = [];
+    for (let i = 0; i < recordsSnap.docs.length; i += 400) {
+      chunks.push(recordsSnap.docs.slice(i, i + 400));
+    }
+
+    for (const chunk of chunks) {
+      const batch = writeBatch(db);
+      for (const d of chunk) {
+        batch.delete(d.ref);
+      }
+      await batch.commit();
+    }
+
+    // Now delete the main document
+    await deleteDoc(doc(db, 'workspaces', workspaceId));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, path);
+  }
 };
 
 export const loadLatestWorkspace = async (): Promise<{workspaceId: string, records: ApprovableRecord[]} | null> => {
