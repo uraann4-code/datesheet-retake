@@ -98,10 +98,10 @@ export function ApprovalPanel({ records, setRecords, workspaceId, examType }: Ap
         'Enrollment': row[enrollmentKey] || '',
         'Class': row[classKey] || '',
         'Subject': row[subjectKey] || '',
-        'CODE': row[codeKey] || '',
+        'Course Code': row[codeKey] || '',
         'Teacher Name': row[teacherKey] || '',
         'Remarks(If Any)': row[remarksKey] || '',
-        'DECission': decision
+        'Decision': decision
       };
     });
 
@@ -135,7 +135,7 @@ export function ApprovalPanel({ records, setRecords, workspaceId, examType }: Ap
         Object.keys(r).forEach(k => {
           if (!k.startsWith('_')) newRow[k] = r[k];
         });
-        newRow['DECission'] = 'Recommended';
+        newRow['Decision'] = 'Recommended';
         return newRow;
       });
       
@@ -158,7 +158,7 @@ export function ApprovalPanel({ records, setRecords, workspaceId, examType }: Ap
             newRow[k] = r[k];
           }
         });
-        newRow['DECission'] = 'Recommended';
+        newRow['Decision'] = 'Recommended';
         return newRow;
       });
       

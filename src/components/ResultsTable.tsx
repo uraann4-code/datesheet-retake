@@ -45,17 +45,22 @@ export function ResultsTable({
       if (session === 'Session 1') session = 'I';
       else if (session === 'Session 2') session = 'II';
 
-      return {
-        'Sr #': index + 1,
-        'Date': row['Date'] || '',
-        'Session': session,
-        'Name': row[nameKey] || '',
-        'Enrollment': row[enrollmentKey] || '',
-        'Program': row[programKey] || '',
-        'Subject': row[subjectKey] || '',
-        'Course Code': row[codeKey] || '',
-        'Teacher Name': row[teacherKey] || ''
-      };
+      // Start with original row data but remove the internal metadata
+      const cleanRow: any = {};
+      
+      // We want Date and Session at the beginning or specific order
+      cleanRow['Sr #'] = index + 1;
+      cleanRow['Date'] = row['Date'] || '';
+      cleanRow['Session'] = session;
+      
+      // Add all other keys from the original data
+      Object.keys(row).forEach(k => {
+        if (!['Date', 'Session', '_id', '_status'].includes(k)) {
+          cleanRow[k] = row[k];
+        }
+      });
+
+      return cleanRow;
     });
 
     // Create worksheet starting with title
@@ -113,10 +118,10 @@ export function ResultsTable({
         'Enrollment': row[enrollmentKey] || '',
         'Class': row[classKey] || '',
         'Subject': row[subjectKey] || '',
-        'CODE': row[codeKey] || '',
+        'Course Code': row[codeKey] || '',
         'Teacher Name': row[teacherKey] || '',
         'Remarks(If Any)': row[remarksKey] || '',
-        'DECission': decision
+        'Decision': decision
       };
     });
 
@@ -150,7 +155,7 @@ export function ResultsTable({
         Object.keys(r).forEach(k => {
           if (!k.startsWith('_')) newRow[k] = r[k];
         });
-        newRow['DECission'] = 'Recommended';
+        newRow['Decision'] = 'Recommended';
         return newRow;
       });
       
@@ -173,7 +178,7 @@ export function ResultsTable({
             newRow[k] = r[k];
           }
         });
-        newRow['DECission'] = 'Recommended';
+        newRow['Decision'] = 'Recommended';
         return newRow;
       });
       
@@ -191,18 +196,47 @@ export function ResultsTable({
     <div className="space-y-8">
       {/* Top Action Bar */}
       <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-          <div>
+        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
+          <div className="flex-1">
             <h2 className="text-2xl font-bold text-gray-800">Datesheet Generated (Approved Cases Only) 🎉</h2>
-            <p className="text-gray-500 mt-1">Only Recommended/Approved cases have been scheduled.</p>
+            <p className="text-gray-500 mt-1">Only Recommended/Approved cases have been scheduled. Download all required files below.</p>
           </div>
-          <button
-            onClick={handleExportDatesheet}
-            className="flex items-center gap-2 px-6 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-all shadow-md hover:shadow-lg font-bold text-base w-full sm:w-auto justify-center"
-          >
-            <CalendarDays className="w-5 h-5" />
-            Download Datesheet
-          </button>
+          
+          <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
+            <button
+              onClick={handleExportDatesheet}
+              className="flex items-center gap-2 px-6 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-all shadow-md hover:shadow-lg font-bold text-base whitespace-nowrap justify-center"
+            >
+              <CalendarDays className="w-5 h-5" />
+              Download Datesheet
+            </button>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 w-full lg:w-auto">
+              <button
+                onClick={handleExportDGIC}
+                className="flex items-center justify-center gap-2 px-4 py-3 bg-blue-50 text-blue-700 border border-blue-200 rounded-xl hover:bg-blue-100 transition-colors text-xs font-bold"
+                title="Download DG IC Approval File"
+              >
+                <Building2 className="w-4 h-4" />
+                DG IC File
+              </button>
+              <button
+                onClick={handleExportAccountOffice}
+                className="flex items-center justify-center gap-2 px-4 py-3 bg-purple-50 text-purple-700 border border-purple-200 rounded-xl hover:bg-purple-100 transition-colors text-xs font-bold"
+                title="Download Account Office File"
+              >
+                <FileSpreadsheet className="w-4 h-4" />
+                Account
+              </button>
+              <button
+                onClick={handleExportDepartment}
+                className="flex items-center justify-center gap-2 px-4 py-3 bg-orange-50 text-orange-700 border border-orange-200 rounded-xl hover:bg-orange-100 transition-colors text-xs font-bold"
+                title="Download Department File"
+              >
+                <FileText className="w-4 h-4" />
+                Dept File
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
