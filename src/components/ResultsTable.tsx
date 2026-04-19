@@ -45,17 +45,15 @@ export function ResultsTable({
       if (session === 'Session 1') session = 'I';
       else if (session === 'Session 2') session = 'II';
 
-      // Start with original row data but remove the internal metadata
+      // Start with Date and Session as requested for a clear datesheet
       const cleanRow: any = {};
-      
-      // We want Date and Session at the beginning or specific order
-      cleanRow['Sr #'] = index + 1;
+      cleanRow['S#'] = index + 1;
       cleanRow['Date'] = row['Date'] || '';
       cleanRow['Session'] = session;
       
-      // Add all other keys from the original data
+      // Add all other keys from the original data in their original order
       Object.keys(row).forEach(k => {
-        if (!['Date', 'Session', '_id', '_status'].includes(k)) {
+        if (!['Date', 'Session', '_id', '_status', 'Sr #', 'S#'].includes(k)) {
           cleanRow[k] = row[k];
         }
       });

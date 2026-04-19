@@ -66,9 +66,13 @@ export function generateSchedule(
     const program = programKey ? String(record[programKey] || '').trim() : '';
 
     // If we have a subject but no explicit course code, use subject as code
-    // Or if the user wants to group by subject, we treat subject as the primary identifier
-    const primaryId = (subject || courseCode || 'UNKNOWN').trim();
-    const normalizedPrimaryId = primaryId.toUpperCase();
+    // Normalize string: remove extra spaces, special chars, and uppercase
+    const cleanSubject = subject.toUpperCase().replace(/[^A-Z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
+    const cleanCode = courseCode.toUpperCase().replace(/[^A-Z0-9]/g, '').trim();
+
+    // Primary grouping key: strictly by subject name if requested, but include code for more specificity
+    const primaryId = cleanSubject || cleanCode || 'UNKNOWN';
+    const normalizedPrimaryId = primaryId;
     
     const isMS = /\b(MS|MBA|MPhil|Masters?)\b/i.test(program) || /MS\s*\(/.test(program);
 

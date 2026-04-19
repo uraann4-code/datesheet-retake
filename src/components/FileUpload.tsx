@@ -48,42 +48,54 @@ export function FileUpload({ onDataLoaded, isLoading }: FileUploadProps) {
     }
 
     // Convert to JSON using the best found header row
-    const initialJson: any[] = XLSX.utils.sheet_to_json(worksheet, { 
-      range: bestHeaderIndex,
-      defval: "" 
-    });
+    const headers = rows[bestHeaderIndex].map(h => String(h || "").trim());
+    const dataRows = rows.slice(bestHeaderIndex + 1);
     
-    // Forward fill logic for merged cells
-    if (initialJson.length === 0) {
-      onDataLoaded([]);
-      return;
-    }
-
     const processedJson: any[] = [];
-    let lastValidRow: any = { ...initialJson[0] };
+    const lastValidValues: Record<string, any> = {};
 
-    for (let i = 0; i < initialJson.length; i++) {
-      const currentRow = initialJson[i];
-      const newRow = { ...currentRow };
+    dataRows.forEach((row, rowIndex) => {
+      const rowData: any = {};
+      let hasAnyValue = false;
+      
+      headers.forEach((header, colIndex) => {
+        if (!header || header.startsWith("__EMPTY")) return;
+        const val = String(row[colIndex] || "").trim();
+        rowData[header] = val;
+        if (val !== "") hasAnyValue = true;
+      });
 
-      const keys = Object.keys(currentRow);
-      let hasData = false;
+      if (!hasAnyValue) return;
 
-      keys.forEach(key => {
-        const val = String(currentRow[key]).trim();
-        // Skip keys that look like "Sr #" or index if they are empty
-        if (val !== "") {
-          hasData = true;
-          lastValidRow[key] = currentRow[key];
-        } else {
-          newRow[key] = lastValidRow[key];
+      // Smart Forward Fill for Student Info columns
+      headers.forEach(header => {
+        if (!header || header.startsWith("__EMPTY")) return;
+        const hLower = header.toLowerCase();
+        const isStudentField = hLower.match(/enrollment|reg|registration|studentid|rollno|reg#|name|program|class|degree/);
+        
+        if (rowData[header] === "" && isStudentField && lastValidValues[header]) {
+          // If a student field is empty, but we have a previous value and THIS row has a subject, fill it
+          const subjectKey = headers.find(h => h.toLowerCase().match(/subject|course|coursename|coursetitle|sub/));
+          if (subjectKey && row[headers.indexOf(subjectKey)]) {
+            rowData[header] = lastValidValues[header];
+          }
+        }
+        
+        if (rowData[header] !== "") {
+          lastValidValues[header] = rowData[header];
         }
       });
 
-      if (hasData) {
-        processedJson.push(newRow);
+      // Add internal metadata
+      const enrollmentKey = headers.find(h => h.toLowerCase().match(/enrollment|reg|registration|studentid|rollno|reg#/));
+      const subjectKey = headers.find(h => h.toLowerCase().match(/subject|course|coursename|coursetitle|sub/));
+      
+      if (enrollmentKey && rowData[enrollmentKey] && subjectKey && rowData[subjectKey]) {
+        rowData._id = `${rowData[enrollmentKey]}-${rowData[subjectKey]}-${rowIndex}`.replace(/[\s/]/g, '_');
+        rowData._status = 'pending';
+        processedJson.push(rowData);
       }
-    }
+    });
 
     onDataLoaded(processedJson);
   };
