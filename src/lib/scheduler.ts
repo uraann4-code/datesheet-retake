@@ -6,6 +6,7 @@ export interface TimeSlot {
 }
 
 export interface Course {
+  matchId: string;
   courseCode: string;
   subject: string;
   students: Set<string>;
@@ -79,7 +80,7 @@ export function generateSchedule(
     return {
       original: record,
       enrollment,
-      courseCode: normalizedPrimaryId, // Using primaryId (usually Subject) for grouping
+      matchId: normalizedPrimaryId,
       displayCourseCode: courseCode || normalizedPrimaryId,
       subject: subject || courseCode,
       teacherName,
@@ -88,40 +89,41 @@ export function generateSchedule(
   });
 
   standardizedRecords.forEach((record) => {
-    if (!record.enrollment || !record.courseCode) return;
+    if (!record.enrollment || !record.matchId) return;
 
-    if (!coursesMap.has(record.courseCode)) {
-      coursesMap.set(record.courseCode, {
-        courseCode: record.displayCourseCode, // Use the actual code if exists for display
+    if (!coursesMap.has(record.matchId)) {
+      coursesMap.set(record.matchId, {
+        matchId: record.matchId,
+        courseCode: record.displayCourseCode,
         subject: record.subject,
         students: new Set(),
         teacherName: record.teacherName,
         isMS: record.isMS,
       });
     } else if (record.isMS) {
-      coursesMap.get(record.courseCode)!.isMS = true;
+      coursesMap.get(record.matchId)!.isMS = true;
     }
-    coursesMap.get(record.courseCode)!.students.add(record.enrollment);
+    coursesMap.get(record.matchId)!.students.add(record.enrollment);
 
     if (!studentCourses.has(record.enrollment)) {
       studentCourses.set(record.enrollment, new Set());
     }
-    studentCourses.get(record.enrollment)!.add(record.courseCode);
+    studentCourses.get(record.enrollment)!.add(record.matchId);
   });
 
   const courses = Array.from(coursesMap.values());
 
   // 3. Build conflict graph
   const conflicts = new Map<string, Set<string>>();
-  courses.forEach((c) => conflicts.set(c.courseCode, new Set()));
+  courses.forEach((c) => conflicts.set(c.matchId, new Set()));
 
   studentCourses.forEach((enrolledCourses) => {
     const courseArray = Array.from(enrolledCourses);
     for (let i = 0; i < courseArray.length; i++) {
-      for (let j = i + 1; j < courseArray.length; j++) {
-        conflicts.get(courseArray[i])!.add(courseArray[j]);
-        conflicts.get(courseArray[j])!.add(courseArray[i]);
-      }
+        for (let j = i + 1; j < courseArray.length; j++) {
+          conflicts.get(courseArray[i])!.add(courseArray[j]);
+          conflicts.get(courseArray[j])!.add(courseArray[i]);
+        }
     }
   });
 
@@ -149,6 +151,13 @@ export function generateSchedule(
     daysAdded++;
   }
 
+  // Ensure we have at least one slot if numDays is 0 or sessions is 0?
+  // But let's assume valid inputs from UI.
+  if (timeSlots.length === 0) {
+    // Failsafe: add today if no slots
+    timeSlots.push({ date: new Date(startDate), session: 1 });
+  }
+
   // 5. Graph Coloring (Welsh-Powell Algorithm)
   // Extract previous assignments if available
   const previousAssignments = new Map<string, number>();
@@ -161,7 +170,7 @@ export function generateSchedule(
           ts.session === sc.timeSlot!.session
         );
         if (slotIndex !== -1) {
-          previousAssignments.set(sc.courseCode, slotIndex);
+          previousAssignments.set(sc.matchId, slotIndex);
         }
       }
     });
@@ -169,17 +178,17 @@ export function generateSchedule(
 
   // Sort courses: Previously scheduled courses first, then by degree (number of conflicts) descending
   courses.sort((a, b) => {
-    const aHasPrev = previousAssignments.has(a.courseCode);
-    const bHasPrev = previousAssignments.has(b.courseCode);
+    const aHasPrev = previousAssignments.has(a.matchId);
+    const bHasPrev = previousAssignments.has(b.matchId);
     
     if (aHasPrev && !bHasPrev) return -1;
     if (!aHasPrev && bHasPrev) return 1;
     
-    return conflicts.get(b.courseCode)!.size - conflicts.get(a.courseCode)!.size;
+    return (conflicts.get(b.matchId)?.size || 0) - (conflicts.get(a.matchId)?.size || 0);
   });
 
   const scheduledCourses: ScheduledCourse[] = [];
-  const slotAssignments = new Map<string, number>(); // courseCode -> slotIndex
+  const slotAssignments = new Map<string, number>(); // matchId -> slotIndex
   const slotStudentCounts = new Array(timeSlots.length).fill(0); // For balancing Mid-term
 
   let totalClashes = 0;
@@ -191,10 +200,10 @@ export function generateSchedule(
     let minConflicts = Infinity;
 
     // 1. Try to keep previous assignment
-    const prevSlotIndex = previousAssignments.get(course.courseCode);
+    const prevSlotIndex = previousAssignments.get(course.matchId);
     if (prevSlotIndex !== undefined) {
       let hasConflict = false;
-      const neighbors = conflicts.get(course.courseCode)!;
+      const neighbors = conflicts.get(course.matchId)!;
       neighbors.forEach((neighbor) => {
         if (slotAssignments.get(neighbor) === prevSlotIndex) {
           hasConflict = true;
@@ -225,56 +234,57 @@ export function generateSchedule(
         }
       }
 
-      // If Mid Term, we should consider slots with fewer students among valid slots
-      if (examType === 'mid' && !course.isMS) {
-        // Filter valid indices (those without conflict)
+      // Strategy: Find slots with minimum conflicts
+      for (const i of preferredIndices) {
+        let currentSlotConflicts = 0;
+        const neighbors = conflicts.get(course.matchId)!;
+        
+        neighbors.forEach((neighbor) => {
+          if (slotAssignments.get(neighbor) === i) {
+            currentSlotConflicts++;
+          }
+        });
+
+        if (currentSlotConflicts === 0) {
+          // For Mid-term, we don't just take the first valid slot, 
+          // we collect all valid ones to find the most balanced one.
+          if (examType === 'mid' && !course.isMS) {
+            // Wait to pick best among valid
+          } else {
+            assignedSlot = i;
+            break;
+          }
+        }
+
+        if (currentSlotConflicts < minConflicts) {
+          minConflicts = currentSlotConflicts;
+          minConflictSlot = i;
+        }
+      }
+
+      // If we are in Mid-term mode and found perfect slots, pick the most balanced one
+      if (examType === 'mid' && !course.isMS && assignedSlot === -1) {
         const validIndices = preferredIndices.filter(i => {
           let hasConflict = false;
-          const neighbors = conflicts.get(course.courseCode)!;
+          const neighbors = conflicts.get(course.matchId)!;
           neighbors.forEach((neighbor) => {
-            if (slotAssignments.get(neighbor) === i) {
-              hasConflict = true;
-            }
+            if (slotAssignments.get(neighbor) === i) hasConflict = true;
           });
           return !hasConflict;
         });
 
         if (validIndices.length > 0) {
-          // Sort valid indices by current student count to balance
           validIndices.sort((a, b) => slotStudentCounts[a] - slotStudentCounts[b]);
           assignedSlot = validIndices[0];
         } else {
-          // No perfect slot, will fall back to overlap logic
-        }
-      } else {
-        // Final Term or MS (Packing strategy)
-        for (const i of preferredIndices) {
-          let hasConflict = false;
-          let currentSlotConflicts = 0;
-
-          const neighbors = conflicts.get(course.courseCode)!;
-          neighbors.forEach((neighbor) => {
-            if (slotAssignments.get(neighbor) === i) {
-              hasConflict = true;
-              currentSlotConflicts++;
-            }
-          });
-
-          if (!hasConflict) {
-            assignedSlot = i;
-            break;
-          }
-
-          if (currentSlotConflicts < minConflicts) {
-            minConflicts = currentSlotConflicts;
-            minConflictSlot = i;
-          }
+          // Fallback to minConflictSlot already set in the loop above
+          assignedSlot = -1; 
         }
       }
     }
 
     if (assignedSlot !== -1) {
-      slotAssignments.set(course.courseCode, assignedSlot);
+      slotAssignments.set(course.matchId, assignedSlot);
       slotStudentCounts[assignedSlot] += course.students.size;
       scheduledCourses.push({
         ...course,
@@ -282,7 +292,7 @@ export function generateSchedule(
       });
     } else if (minConflictSlot !== -1) {
       // If no slot without conflict is found, assign the one with minimum conflicts
-      slotAssignments.set(course.courseCode, minConflictSlot);
+      slotAssignments.set(course.matchId, minConflictSlot);
       slotStudentCounts[minConflictSlot] += course.students.size;
       scheduledCourses.push({
         ...course,
@@ -291,7 +301,7 @@ export function generateSchedule(
       totalClashes += minConflicts;
       
       // Record the specific conflicts
-      const neighbors = conflicts.get(course.courseCode)!;
+      const neighbors = conflicts.get(course.matchId)!;
       neighbors.forEach((neighbor) => {
         if (slotAssignments.get(neighbor) === minConflictSlot) {
           // Find students taking both courses
@@ -302,7 +312,7 @@ export function generateSchedule(
               unresolvedConflicts.push({
                 student,
                 course1: course.courseCode,
-                course2: neighbor
+                course2: coursesMap.get(neighbor)!.courseCode
               });
             }
           });
@@ -317,7 +327,7 @@ export function generateSchedule(
 
   // 6. Map back to original records
   const finalDatesheet = standardizedRecords.map((stdRecord) => {
-    const scheduled = scheduledCourses.find((c) => c.courseCode === stdRecord.courseCode);
+    const scheduled = scheduledCourses.find((c) => c.matchId === stdRecord.matchId);
 
     // Create a new object with Date and Session at the beginning
     const newRecord: any = {};
