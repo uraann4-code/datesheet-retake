@@ -151,13 +151,22 @@ export function generateSchedule(
     daysAdded++;
   }
 
-  // Ensure we have at least one slot if numDays is 0 or sessions is 0?
-  // But let's assume valid inputs from UI.
-  if (timeSlots.length === 0) {
-    // Failsafe: add today if no slots
-    timeSlots.push({ date: new Date(startDate), session: 1 });
+  // Create an "Extra Buffer Day" for leftover clashes
+  // This will be the next working day after the last day of regular schedule
+  let bufferDate = new Date(currentDate);
+  while (skipWeekends && isWeekend(bufferDate)) {
+    bufferDate = addDays(bufferDate, 1);
   }
+  
+  const bufferSlot: TimeSlot = {
+    date: bufferDate,
+    session: 1 // Always first session of buffer day
+  };
 
+  const allSlots = [...timeSlots];
+  // Note: We don't push bufferSlot to allSlots yet because we only want to use it as a 
+  // last resort, not during the regular Welsh-Powell assignment.
+  
   // 5. Graph Coloring (Welsh-Powell Algorithm)
   // Extract previous assignments if available
   const previousAssignments = new Map<string, number>();
@@ -188,7 +197,7 @@ export function generateSchedule(
   });
 
   const scheduledCourses: ScheduledCourse[] = [];
-  const slotAssignments = new Map<string, number>(); // matchId -> slotIndex
+  const slotAssignments = new Map<string, number>(); // matchId -> slotIndex (-1 for buffer day)
   const slotStudentCounts = new Array(timeSlots.length).fill(0); // For balancing Mid-term
 
   let totalClashes = 0;
@@ -196,8 +205,6 @@ export function generateSchedule(
 
   courses.forEach((course) => {
     let assignedSlot = -1;
-    let minConflictSlot = -1;
-    let minConflicts = Infinity;
 
     // 1. Try to keep previous assignment
     const prevSlotIndex = previousAssignments.get(course.matchId);
@@ -219,66 +226,23 @@ export function generateSchedule(
     if (assignedSlot === -1) {
       let preferredIndices: number[] = [];
       if (course.isMS) {
-        // First, all session 2 slots
-        for (let i = 0; i < timeSlots.length; i++) {
-          if (timeSlots[i].session === 2) preferredIndices.push(i);
-        }
-        // Then, all other slots
-        for (let i = 0; i < timeSlots.length; i++) {
-          if (timeSlots[i].session !== 2) preferredIndices.push(i);
-        }
+        for (let i = 0; i < timeSlots.length; i++) if (timeSlots[i].session === 2) preferredIndices.push(i);
+        for (let i = 0; i < timeSlots.length; i++) if (timeSlots[i].session !== 2) preferredIndices.push(i);
       } else {
-        // Chronological
-        for (let i = 0; i < timeSlots.length; i++) {
-          preferredIndices.push(i);
-        }
+        for (let i = 0; i < timeSlots.length; i++) preferredIndices.push(i);
       }
 
-      // Strategy: Find slots with minimum conflicts
+      // Find slot with ZERO conflicts first
       for (const i of preferredIndices) {
-        let currentSlotConflicts = 0;
+        let hasConflict = false;
         const neighbors = conflicts.get(course.matchId)!;
-        
         neighbors.forEach((neighbor) => {
-          if (slotAssignments.get(neighbor) === i) {
-            currentSlotConflicts++;
-          }
+          if (slotAssignments.get(neighbor) === i) hasConflict = true;
         });
 
-        if (currentSlotConflicts === 0) {
-          // For Mid-term, we don't just take the first valid slot, 
-          // we collect all valid ones to find the most balanced one.
-          if (examType === 'mid' && !course.isMS) {
-            // Wait to pick best among valid
-          } else {
-            assignedSlot = i;
-            break;
-          }
-        }
-
-        if (currentSlotConflicts < minConflicts) {
-          minConflicts = currentSlotConflicts;
-          minConflictSlot = i;
-        }
-      }
-
-      // If we are in Mid-term mode and found perfect slots, pick the most balanced one
-      if (examType === 'mid' && !course.isMS && assignedSlot === -1) {
-        const validIndices = preferredIndices.filter(i => {
-          let hasConflict = false;
-          const neighbors = conflicts.get(course.matchId)!;
-          neighbors.forEach((neighbor) => {
-            if (slotAssignments.get(neighbor) === i) hasConflict = true;
-          });
-          return !hasConflict;
-        });
-
-        if (validIndices.length > 0) {
-          validIndices.sort((a, b) => slotStudentCounts[a] - slotStudentCounts[b]);
-          assignedSlot = validIndices[0];
-        } else {
-          // Fallback to minConflictSlot already set in the loop above
-          assignedSlot = -1; 
+        if (!hasConflict) {
+          assignedSlot = i;
+          break;
         }
       }
     }
@@ -291,42 +255,19 @@ export function generateSchedule(
         timeSlot: timeSlots[assignedSlot],
       });
     } else {
-      // Fallback: Force assignment to the absolute LAST slot as requested by user
-      const fallbackSlot = timeSlots.length - 1;
-      
-      slotAssignments.set(course.matchId, fallbackSlot);
-      slotStudentCounts[fallbackSlot] += course.students.size;
-      
+      // LAST RESORT: Move to Buffer Day!
+      // This course has conflicts in all regular slots
       scheduledCourses.push({
         ...course,
-        timeSlot: timeSlots[fallbackSlot],
-        _isForced: true // Custom flag for UI highlighting
+        timeSlot: bufferSlot,
+        _isForced: true,
+        _isBufferDay: true // Mark as buffer day
       } as any);
-
-      // Record conflicts for this fallback slot
-      const neighbors = conflicts.get(course.matchId)!;
-      neighbors.forEach((neighbor) => {
-        if (slotAssignments.get(neighbor) === fallbackSlot) {
-          const studentsInCourse = course.students;
-          const studentsInNeighbor = coursesMap.get(neighbor)!.students;
-          studentsInCourse.forEach(student => {
-            if (studentsInNeighbor.has(student)) {
-              unresolvedConflicts.push({
-                student,
-                course1: course.courseCode,
-                course2: coursesMap.get(neighbor)!.courseCode
-              });
-            }
-          });
-        }
-      });
       
-      // Update total clashes count
-      let currentSlotConflicts = 0;
-      neighbors.forEach((neighbor) => {
-        if (slotAssignments.get(neighbor) === fallbackSlot) currentSlotConflicts++;
-      });
-      totalClashes += currentSlotConflicts;
+      slotAssignments.set(course.matchId, -99); // Use special index for buffer day
+      
+      // Note: We don't increment totalClashes here because moving to a new day 
+      // resolves the conflict for the regular schedule.
     }
   });
 
@@ -334,27 +275,26 @@ export function generateSchedule(
   const finalDatesheet = standardizedRecords.map((stdRecord) => {
     const scheduled = scheduledCourses.find((c) => c.matchId === stdRecord.matchId);
     const isForced = (scheduled as any)?._isForced || false;
+    const isBufferDay = (scheduled as any)?._isBufferDay || false;
 
     const newRecord: any = {};
     if (scheduled?.timeSlot) {
       newRecord['Date'] = format(scheduled.timeSlot.date, 'dd-MMM-yy');
-      newRecord['Session'] = `Session ${scheduled.timeSlot.session}`;
+      newRecord['Session'] = isBufferDay ? 'Extra Session' : `Session ${scheduled.timeSlot.session}`;
     } else {
-      // This should ideally never happen now
       newRecord['Date'] = 'Unscheduled';
       newRecord['Session'] = 'Unscheduled';
     }
 
     newRecord['_isForced'] = isForced;
+    newRecord['_isBufferDay'] = isBufferDay;
 
     // Copy original properties
     Object.keys(stdRecord.original).forEach(key => {
-      // Don't overwrite if the original record already had Date/Session but we want to use our generated ones
       if (key.toLowerCase() !== 'date' && key.toLowerCase() !== 'session') {
         let val = stdRecord.original[key];
-        // Add a prefix to the subject or name for forced rows so it's visible in Excel too
-        if (isForced && (key.toLowerCase() === 'subject' || key.toLowerCase().includes('course'))) {
-          val = `[CLASH] ${val}`;
+        if (isBufferDay && (key.toLowerCase() === 'subject' || key.toLowerCase().includes('course'))) {
+          val = `[EXTRA DAY] ${val}`;
         }
         newRecord[key] = val;
       }
