@@ -10,6 +10,8 @@ interface ConfigurationPanelProps {
   setSessionsPerDay: (sessions: number) => void;
   skipWeekends: boolean;
   setSkipWeekends: (skip: boolean) => void;
+  extraDay: string;
+  setExtraDay: (date: string) => void;
   onGenerate: () => void;
   isReady: boolean;
 }
@@ -23,6 +25,8 @@ export function ConfigurationPanel({
   setSessionsPerDay,
   skipWeekends,
   setSkipWeekends,
+  extraDay,
+  setExtraDay,
   onGenerate,
   isReady,
 }: ConfigurationPanelProps) {
@@ -79,6 +83,20 @@ export function ConfigurationPanel({
             className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all bg-gray-50"
           />
           <p className="text-xs text-gray-500 mt-1">Example: 2 (Morning & Evening)</p>
+        </div>
+
+        <div>
+          <label className="block text-sm font-semibold text-gray-700 mb-1 flex items-center gap-2">
+            <Calendar className="w-4 h-4 text-purple-400" />
+            Extra Clash Day (Optional)
+          </label>
+          <input
+            type="date"
+            value={extraDay}
+            onChange={(e) => setExtraDay(e.target.value)}
+            className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none transition-all bg-gray-50 text-sm"
+          />
+          <p className="text-[10px] text-gray-400 mt-1">Select a date for students with unresolved conflicts.</p>
         </div>
 
         <div className="flex items-center bg-blue-50 p-3 rounded-lg border border-blue-100">

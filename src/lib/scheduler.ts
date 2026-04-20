@@ -37,7 +37,8 @@ export function generateSchedule(
   sessionsPerDay: number,
   skipWeekends: boolean = true,
   previousResult: ScheduleResult | null = null,
-  examType: ExamType = 'final'
+  examType: ExamType = 'final',
+  bufferDateInput?: Date
 ): ScheduleResult {
   // 1. Identify columns globally
   const allKeys = new Set<string>();
@@ -152,10 +153,15 @@ export function generateSchedule(
   }
 
   // Create an "Extra Buffer Day" for leftover clashes
-  // This will be the next working day after the last day of regular schedule
-  let bufferDate = new Date(currentDate);
-  while (skipWeekends && isWeekend(bufferDate)) {
-    bufferDate = addDays(bufferDate, 1);
+  // If user provided a date, use it. Otherwise calculate next working day.
+  let bufferDate: Date;
+  if (bufferDateInput) {
+    bufferDate = new Date(bufferDateInput);
+  } else {
+    bufferDate = new Date(currentDate);
+    while (skipWeekends && isWeekend(bufferDate)) {
+      bufferDate = addDays(bufferDate, 1);
+    }
   }
   
   const bufferSlot: TimeSlot = {

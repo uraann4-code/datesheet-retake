@@ -27,6 +27,7 @@ export function DatesheetGenerator({ workspaceId: initialWorkspaceId }: Dateshee
   const [numDays, setNumDays] = useState<number>(10);
   const [sessionsPerDay, setSessionsPerDay] = useState<number>(2);
   const [skipWeekends, setSkipWeekends] = useState<boolean>(true);
+  const [extraDay, setExtraDay] = useState<string>('');
   
   const [isGenerating, setIsGenerating] = useState(false);
   const [result, setResult] = useState<ScheduleResult | null>(null);
@@ -110,7 +111,8 @@ export function DatesheetGenerator({ workspaceId: initialWorkspaceId }: Dateshee
           sessionsPerDay,
           skipWeekends,
           result,
-          examType
+          examType,
+          extraDay ? new Date(extraDay) : undefined
         );
         setResult(scheduleResult);
       } catch (error) {
@@ -132,6 +134,7 @@ export function DatesheetGenerator({ workspaceId: initialWorkspaceId }: Dateshee
     setNumDays(10);
     setSessionsPerDay(2);
     setSkipWeekends(true);
+    setExtraDay('');
     setStep('upload');
     setDirectSchedule(false);
     setExamType('final');
@@ -342,6 +345,8 @@ export function DatesheetGenerator({ workspaceId: initialWorkspaceId }: Dateshee
               setSessionsPerDay={setSessionsPerDay}
               skipWeekends={skipWeekends}
               setSkipWeekends={setSkipWeekends}
+              extraDay={extraDay}
+              setExtraDay={setExtraDay}
               onGenerate={() => handleGenerate()}
               isReady={records.length > 0 && approvedCount > 0 && !isGenerating}
             />
