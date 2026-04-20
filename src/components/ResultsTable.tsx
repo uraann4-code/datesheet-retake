@@ -188,7 +188,7 @@ export function ResultsTable({
 
   if (!data || data.length === 0) return null;
 
-  const headers = Object.keys(data[0]);
+  const headers = Object.keys(data[0]).filter(k => !k.startsWith('_'));
 
   return (
     <div className="space-y-8">
@@ -329,14 +329,20 @@ export function ResultsTable({
               {data.map((row, index) => (
                 <tr
                   key={index}
-                  className="bg-white border-b hover:bg-gray-50 transition-colors"
+                  className={`border-b transition-colors ${
+                    row._isForced 
+                      ? 'bg-red-100 hover:bg-red-200 text-red-900 border-red-200' 
+                      : 'bg-white hover:bg-gray-50 border-gray-100'
+                  }`}
                 >
                   {headers.map((header) => (
                     <td
                       key={`${index}-${header}`}
                       className={`px-6 py-4 ${
-                        header === 'Date' || header === 'Session'
+                        (header === 'Date' || header === 'Session') && !row._isForced
                           ? 'font-semibold text-gray-900'
+                          : row._isForced
+                          ? 'font-medium'
                           : ''
                       }`}
                     >

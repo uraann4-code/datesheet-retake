@@ -290,21 +290,23 @@ export function generateSchedule(
         ...course,
         timeSlot: timeSlots[assignedSlot],
       });
-    } else if (minConflictSlot !== -1) {
-      // If no slot without conflict is found, assign the one with minimum conflicts
-      slotAssignments.set(course.matchId, minConflictSlot);
-      slotStudentCounts[minConflictSlot] += course.students.size;
+    } else {
+      // Fallback: Force assignment to the absolute LAST slot as requested by user
+      const fallbackSlot = timeSlots.length - 1;
+      
+      slotAssignments.set(course.matchId, fallbackSlot);
+      slotStudentCounts[fallbackSlot] += course.students.size;
+      
       scheduledCourses.push({
         ...course,
-        timeSlot: timeSlots[minConflictSlot],
-      });
-      totalClashes += minConflicts;
-      
-      // Record the specific conflicts
+        timeSlot: timeSlots[fallbackSlot],
+        _isForced: true // Custom flag for UI highlighting
+      } as any);
+
+      // Record conflicts for this fallback slot
       const neighbors = conflicts.get(course.matchId)!;
       neighbors.forEach((neighbor) => {
-        if (slotAssignments.get(neighbor) === minConflictSlot) {
-          // Find students taking both courses
+        if (slotAssignments.get(neighbor) === fallbackSlot) {
           const studentsInCourse = course.students;
           const studentsInNeighbor = coursesMap.get(neighbor)!.students;
           studentsInCourse.forEach(student => {
@@ -318,32 +320,43 @@ export function generateSchedule(
           });
         }
       });
-    } else {
-      scheduledCourses.push({
-        ...course,
+      
+      // Update total clashes count
+      let currentSlotConflicts = 0;
+      neighbors.forEach((neighbor) => {
+        if (slotAssignments.get(neighbor) === fallbackSlot) currentSlotConflicts++;
       });
+      totalClashes += currentSlotConflicts;
     }
   });
 
   // 6. Map back to original records
   const finalDatesheet = standardizedRecords.map((stdRecord) => {
     const scheduled = scheduledCourses.find((c) => c.matchId === stdRecord.matchId);
+    const isForced = (scheduled as any)?._isForced || false;
 
-    // Create a new object with Date and Session at the beginning
     const newRecord: any = {};
     if (scheduled?.timeSlot) {
       newRecord['Date'] = format(scheduled.timeSlot.date, 'dd-MMM-yy');
       newRecord['Session'] = `Session ${scheduled.timeSlot.session}`;
     } else {
+      // This should ideally never happen now
       newRecord['Date'] = 'Unscheduled';
       newRecord['Session'] = 'Unscheduled';
     }
+
+    newRecord['_isForced'] = isForced;
 
     // Copy original properties
     Object.keys(stdRecord.original).forEach(key => {
       // Don't overwrite if the original record already had Date/Session but we want to use our generated ones
       if (key.toLowerCase() !== 'date' && key.toLowerCase() !== 'session') {
-        newRecord[key] = stdRecord.original[key];
+        let val = stdRecord.original[key];
+        // Add a prefix to the subject or name for forced rows so it's visible in Excel too
+        if (isForced && (key.toLowerCase() === 'subject' || key.toLowerCase().includes('course'))) {
+          val = `[CLASH] ${val}`;
+        }
+        newRecord[key] = val;
       }
     });
 
