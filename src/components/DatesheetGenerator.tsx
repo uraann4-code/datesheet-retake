@@ -34,6 +34,7 @@ export function DatesheetGenerator({
   const [extraDay, setExtraDay] = useState<string>('');
   const [baseWorkspaceId, setBaseWorkspaceId] = useState<string>('');
   const [availableWorkspaces, setAvailableWorkspaces] = useState<any[]>([]);
+  const [uploadedBaseRecords, setUploadedBaseRecords] = useState<any[]>([]);
   
   const [isGenerating, setIsGenerating] = useState(false);
   const [result, setResult] = useState<ScheduleResult | null>(null);
@@ -147,48 +148,53 @@ export function DatesheetGenerator({
       try {
         let recordsForScheduling = [...approvedRecords];
         
-        // If a base workspace is selected, load its records to match against
+        // Match assignments from either historical base workspace or uploaded base file
+        let baseAssignments: any[] = [];
+        
         if (baseWorkspaceId) {
           const baseWs = await loadWorkspaceById(baseWorkspaceId);
           if (baseWs) {
-            // Find records in baseWs that have Dates and Sessions
-            const baseAssignments = baseWs.records.filter(r => r['Date'] && r['Session']);
-            
-            // For each course in our approvedRecords, if a matching course exists in baseAssignments, 
-            // set its Date and Session so scheduler.ts can infer it.
-            recordsForScheduling = approvedRecords.map(rec => {
-              const recKeys = Object.keys(rec);
-              const recSubKey = recKeys.find(k => k.toLowerCase().match(/subject|course|coursename|coursetitle|sub/));
-              const recCodeKey = recKeys.find(k => k.toLowerCase().match(/code|id/)) || recSubKey;
-              
-              if (!recSubKey) return rec;
-
-              const matchingBase = baseAssignments.find(base => {
-                const baseKeys = Object.keys(base);
-                const baseSubKey = baseKeys.find(k => k.toLowerCase().match(/subject|course|coursename|coursetitle|sub/));
-                const baseCodeKey = baseKeys.find(k => k.toLowerCase().match(/code|id/)) || baseSubKey;
-
-                if (baseSubKey && recSubKey) {
-                  // Match by code first, then by subject
-                  const codeMatch = baseCodeKey && recCodeKey && 
-                    String(base[baseCodeKey]).toLowerCase().trim() === String(rec[recCodeKey]).toLowerCase().trim();
-                  const subMatch = String(base[baseSubKey]).toLowerCase().trim() === String(rec[recSubKey]).toLowerCase().trim();
-                  
-                  return codeMatch || subMatch;
-                }
-                return false;
-              });
-
-              if (matchingBase) {
-                return {
-                  ...rec,
-                  Date: matchingBase['Date'],
-                  Session: matchingBase['Session']
-                };
-              }
-              return rec;
-            });
+            baseAssignments = baseWs.records.filter(r => r['Date'] && r['Session']);
           }
+        } else if (uploadedBaseRecords.length > 0) {
+          baseAssignments = uploadedBaseRecords.filter(r => r['Date'] && r['Session']);
+        }
+
+        if (baseAssignments.length > 0) {
+          // For each course in our approvedRecords, if a matching course exists in baseAssignments, 
+          // set its Date and Session so scheduler.ts can infer it.
+          recordsForScheduling = approvedRecords.map(rec => {
+            const recKeys = Object.keys(rec);
+            const recSubKey = recKeys.find(k => k.toLowerCase().match(/subject|course|coursename|coursetitle|sub/));
+            const recCodeKey = recKeys.find(k => k.toLowerCase().match(/code|id/)) || recSubKey;
+            
+            if (!recSubKey) return rec;
+
+            const matchingBase = baseAssignments.find(base => {
+              const baseKeys = Object.keys(base);
+              const baseSubKey = baseKeys.find(k => k.toLowerCase().match(/subject|course|coursename|coursetitle|sub/));
+              const baseCodeKey = baseKeys.find(k => k.toLowerCase().match(/code|id/)) || baseSubKey;
+
+              if (baseSubKey && recSubKey) {
+                // Match by code first, then by subject
+                const codeMatch = baseCodeKey && recCodeKey && 
+                  String(base[baseCodeKey]).toLowerCase().trim() === String(rec[recCodeKey]).toLowerCase().trim();
+                const subMatch = String(base[baseSubKey]).toLowerCase().trim() === String(rec[recSubKey]).toLowerCase().trim();
+                
+                return codeMatch || subMatch;
+              }
+              return false;
+            });
+
+            if (matchingBase) {
+              return {
+                ...rec,
+                Date: matchingBase['Date'],
+                Session: matchingBase['Session']
+              };
+            }
+            return rec;
+          });
         }
 
         const scheduleResult = generateSchedule(
@@ -223,6 +229,7 @@ export function DatesheetGenerator({
     setSkipWeekends(true);
     setExtraDay('');
     setBaseWorkspaceId('');
+    setUploadedBaseRecords([]);
     setStep('upload');
     setDirectSchedule(false);
     setExamType('final');
@@ -452,12 +459,14 @@ export function DatesheetGenerator({
               baseWorkspaceId={baseWorkspaceId}
               setBaseWorkspaceId={setBaseWorkspaceId}
               availableWorkspaces={availableWorkspaces}
+              uploadedBaseRecords={uploadedBaseRecords}
+              setUploadedBaseRecords={setUploadedBaseRecords}
               onGenerate={() => handleGenerate()}
               isReady={
                 records.length > 0 && 
                 approvedCount > 0 && 
                 !isGenerating && 
-                (!isLateMode || (isLateMode && baseWorkspaceId))
+                (!isLateMode || (isLateMode && (baseWorkspaceId || uploadedBaseRecords.length > 0)))
               }
               isLateMode={isLateMode}
             />
