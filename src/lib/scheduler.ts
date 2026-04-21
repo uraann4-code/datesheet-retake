@@ -174,18 +174,35 @@ export function generateSchedule(
   // last resort, not during the regular Welsh-Powell assignment.
   
   // 5. Graph Coloring (Welsh-Powell Algorithm)
-  // Extract previous assignments if available
+  // Extract previous assignments if available (either from previousResult or inferred from records)
   const previousAssignments = new Map<string, number>();
+  
   if (previousResult) {
     previousResult.scheduledCourses.forEach(sc => {
       if (sc.timeSlot) {
-        // Find matching slot index in current timeSlots
         const slotIndex = timeSlots.findIndex(ts => 
           ts.date.getTime() === sc.timeSlot!.date.getTime() && 
           ts.session === sc.timeSlot!.session
         );
         if (slotIndex !== -1) {
           previousAssignments.set(sc.matchId, slotIndex);
+        }
+      }
+    });
+  } else {
+    // Inferred assignments: Look at standardizedRecords to see if they already have Date/Session
+    standardizedRecords.forEach(std => {
+      const dateVal = std.original['Date'];
+      const sessionVal = std.original['Session'];
+      if (dateVal && sessionVal) {
+        // Find matching slotIndex in timeSlots
+        const slotIndex = timeSlots.findIndex(ts => {
+          const formattedDate = format(ts.date, 'dd-MMM-yy');
+          const formattedSession = `Session ${ts.session}`;
+          return formattedDate === dateVal && formattedSession === sessionVal;
+        });
+        if (slotIndex !== -1) {
+          previousAssignments.set(std.matchId, slotIndex);
         }
       }
     });

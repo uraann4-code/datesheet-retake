@@ -5,7 +5,7 @@ import { ResultsTable } from './ResultsTable';
 import { ApprovalPanel, ApprovableRecord } from './ApprovalPanel';
 import { generateSchedule, ScheduleResult, ExamType } from '../lib/scheduler';
 import { CalendarDays, Plus, ArrowLeft, CheckCircle2, Cloud, FileSpreadsheet, AlertTriangle, X } from 'lucide-react';
-import { createWorkspace, loadWorkspaceById } from '../lib/db';
+import { createWorkspace, loadWorkspaceById, loadAllWorkspaces } from '../lib/db';
 
 type Step = 'upload' | 'approve' | 'results';
 
@@ -28,10 +28,23 @@ export function DatesheetGenerator({ workspaceId: initialWorkspaceId }: Dateshee
   const [sessionsPerDay, setSessionsPerDay] = useState<number>(2);
   const [skipWeekends, setSkipWeekends] = useState<boolean>(true);
   const [extraDay, setExtraDay] = useState<string>('');
+  const [baseWorkspaceId, setBaseWorkspaceId] = useState<string>('');
+  const [availableWorkspaces, setAvailableWorkspaces] = useState<any[]>([]);
   
   const [isGenerating, setIsGenerating] = useState(false);
   const [result, setResult] = useState<ScheduleResult | null>(null);
   const [resetKey, setResetKey] = useState<number>(0);
+
+  // Load available workspaces for base matching
+  useEffect(() => {
+    async function loadWorkspaces() {
+      const ws = await loadAllWorkspaces();
+      setAvailableWorkspaces(ws.filter(w => w.id !== workspaceId));
+    }
+    if (step === 'approve') {
+      loadWorkspaces();
+    }
+  }, [step, workspaceId]);
 
   // Load workspace if ID is provided
   useEffect(() => {
@@ -126,10 +139,56 @@ export function DatesheetGenerator({ workspaceId: initialWorkspaceId }: Dateshee
     setStep('results');
     
     // Use setTimeout to allow UI to update before heavy computation
-    setTimeout(() => {
+    setTimeout(async () => {
       try {
+        let recordsForScheduling = [...approvedRecords];
+        
+        // If a base workspace is selected, load its records to match against
+        if (baseWorkspaceId) {
+          const baseWs = await loadWorkspaceById(baseWorkspaceId);
+          if (baseWs) {
+            // Find records in baseWs that have Dates and Sessions
+            const baseAssignments = baseWs.records.filter(r => r['Date'] && r['Session']);
+            
+            // For each course in our approvedRecords, if a matching course exists in baseAssignments, 
+            // set its Date and Session so scheduler.ts can infer it.
+            recordsForScheduling = approvedRecords.map(rec => {
+              const recKeys = Object.keys(rec);
+              const recSubKey = recKeys.find(k => k.toLowerCase().match(/subject|course|coursename|coursetitle|sub/));
+              const recCodeKey = recKeys.find(k => k.toLowerCase().match(/code|id/)) || recSubKey;
+              
+              if (!recSubKey) return rec;
+
+              const matchingBase = baseAssignments.find(base => {
+                const baseKeys = Object.keys(base);
+                const baseSubKey = baseKeys.find(k => k.toLowerCase().match(/subject|course|coursename|coursetitle|sub/));
+                const baseCodeKey = baseKeys.find(k => k.toLowerCase().match(/code|id/)) || baseSubKey;
+
+                if (baseSubKey && recSubKey) {
+                  // Match by code first, then by subject
+                  const codeMatch = baseCodeKey && recCodeKey && 
+                    String(base[baseCodeKey]).toLowerCase().trim() === String(rec[recCodeKey]).toLowerCase().trim();
+                  const subMatch = String(base[baseSubKey]).toLowerCase().trim() === String(rec[recSubKey]).toLowerCase().trim();
+                  
+                  return codeMatch || subMatch;
+                }
+                return false;
+              });
+
+              if (matchingBase) {
+                return {
+                  ...rec,
+                  Date: matchingBase['Date'],
+                  Session: matchingBase['Session']
+                };
+              }
+              return rec;
+            });
+          }
+        }
+
         const scheduleResult = generateSchedule(
-          approvedRecords,
+          recordsForScheduling,
           new Date(startDate),
           numDays,
           sessionsPerDay,
@@ -159,6 +218,7 @@ export function DatesheetGenerator({ workspaceId: initialWorkspaceId }: Dateshee
     setSessionsPerDay(2);
     setSkipWeekends(true);
     setExtraDay('');
+    setBaseWorkspaceId('');
     setStep('upload');
     setDirectSchedule(false);
     setExamType('final');
@@ -371,6 +431,9 @@ export function DatesheetGenerator({ workspaceId: initialWorkspaceId }: Dateshee
               setSkipWeekends={setSkipWeekends}
               extraDay={extraDay}
               setExtraDay={setExtraDay}
+              baseWorkspaceId={baseWorkspaceId}
+              setBaseWorkspaceId={setBaseWorkspaceId}
+              availableWorkspaces={availableWorkspaces}
               onGenerate={() => handleGenerate()}
               isReady={records.length > 0 && approvedCount > 0 && !isGenerating}
             />
