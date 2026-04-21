@@ -45,6 +45,7 @@ export function ConfigurationPanel({
   isLateMode,
 }: ConfigurationPanelProps) {
   const [isProcessingBase, setIsProcessingBase] = useState(false);
+  const [activeTab, setActiveTab] = useState<'history' | 'upload'>(uploadedBaseRecords.length > 0 ? 'upload' : 'history');
 
   const handleBaseFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -67,7 +68,8 @@ export function ConfigurationPanel({
           setUploadedBaseRecords([]);
         } else {
           setUploadedBaseRecords(validAssignments);
-          setBaseWorkspaceId(''); // Clear workspace selection if file is uploaded
+          setBaseWorkspaceId(''); 
+          setActiveTab('upload');
         }
       } catch (err) {
         console.error("Base upload error:", err);
@@ -78,17 +80,125 @@ export function ConfigurationPanel({
     };
     reader.readAsArrayBuffer(file);
   };
+
+  const handleTabChange = (tab: 'history' | 'upload') => {
+    setActiveTab(tab);
+    if (tab === 'history') {
+      setUploadedBaseRecords([]);
+    } else {
+      setBaseWorkspaceId('');
+    }
+  };
+
   return (
     <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 space-y-6">
       <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
         <Settings className="w-5 h-5 text-blue-500" />
         Exam Settings
       </h3>
-      <p className="text-sm text-gray-500 -mt-4">
-        Tell us how you want to schedule the exams.
-      </p>
-
+      
       <div className="space-y-5">
+        <div className={isLateMode ? 'p-4 bg-blue-50/50 rounded-2xl border-2 border-blue-100 ring-4 ring-blue-50/20 space-y-4' : 'space-y-4'}>
+          <div className="flex flex-col gap-2">
+            <label className="block text-sm font-black text-gray-700 uppercase tracking-wider flex items-center gap-2">
+              <Settings className={`w-4 h-4 ${isLateMode ? 'text-blue-600 animate-pulse' : 'text-blue-400'}`} />
+              Reference Datesheet
+            </label>
+            <div className="flex p-1 bg-gray-100 rounded-xl">
+              <button
+                onClick={() => handleTabChange('history')}
+                className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
+                  activeTab === 'history' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                Saved History
+              </button>
+              <button
+                onClick={() => handleTabChange('upload')}
+                className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
+                  activeTab === 'upload' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                Upload Excel
+              </button>
+            </div>
+          </div>
+
+          {activeTab === 'history' ? (
+            <div>
+              <select
+                value={baseWorkspaceId}
+                onChange={(e) => setBaseWorkspaceId(e.target.value)}
+                className={`w-full px-4 py-3 border rounded-xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 outline-none transition-all text-sm font-medium ${
+                  isLateMode && !baseWorkspaceId 
+                    ? 'border-red-300 bg-red-50 text-red-900 shadow-sm' 
+                    : 'border-gray-200 bg-white text-gray-900'
+                }`}
+              >
+                <option value="">{isLateMode ? '-- Choose from History --' : 'No History Selected'}</option>
+                {availableWorkspaces.map(ws => (
+                  <option key={ws.id} value={ws.id}>
+                    {ws.name} ({new Date(ws.createdAt).toLocaleDateString()})
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <div>
+              {uploadedBaseRecords.length > 0 ? (
+                <div className="flex items-center justify-between p-3 bg-white border border-green-200 rounded-xl shadow-sm">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-green-50 rounded-lg">
+                      <FileSpreadsheet className="w-5 h-5 text-green-600" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-black text-gray-900">Reference File Ready</p>
+                      <p className="text-[10px] text-green-600 font-bold uppercase tracking-tight">{uploadedBaseRecords.length} courses identified</p>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => setUploadedBaseRecords([])}
+                    className="p-1.5 hover:bg-red-50 text-gray-400 hover:text-red-600 rounded-lg transition-all"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ) : (
+                <label className={`flex flex-col items-center justify-center gap-3 w-full p-6 border-2 border-dashed rounded-2xl cursor-pointer transition-all ${
+                  isLateMode 
+                    ? 'bg-white border-blue-200 text-blue-600 hover:border-blue-400' 
+                    : 'bg-gray-50 border-gray-200 text-gray-400 hover:bg-gray-100 hover:border-gray-300'
+                }`}>
+                  <div className={`p-3 rounded-2xl ${isLateMode ? 'bg-blue-50' : 'bg-gray-100'}`}>
+                    {isProcessingBase ? (
+                      <div className="w-6 h-6 border-2 border-gray-300 border-t-blue-600 rounded-full animate-spin"></div>
+                    ) : (
+                      <Upload className={`w-6 h-6 ${isLateMode ? 'text-blue-600' : 'text-gray-400'}`} />
+                    )}
+                  </div>
+                  <div className="text-center">
+                    <p className="text-sm font-black text-gray-700">{isProcessingBase ? 'Analyzing Data...' : 'Upload Reference Sheet'}</p>
+                    <p className="text-[10px] text-gray-400 font-medium">Excel file containing existing schedule</p>
+                  </div>
+                  <input 
+                    type="file" 
+                    className="hidden" 
+                    accept=".xlsx, .xls" 
+                    onChange={handleBaseFileUpload}
+                    disabled={isProcessingBase}
+                  />
+                </label>
+              )}
+            </div>
+          )}
+
+          <p className="text-[10px] bg-blue-100/50 p-2 rounded-lg text-blue-800 font-bold leading-snug">
+            {isLateMode 
+              ? 'Required: Select a reference to ensure old subjects keep their original dates.' 
+              : 'Subjects in your current data that match the reference will keep their old Date/Session.'}
+          </p>
+        </div>
+
         <div>
           <label className="block text-sm font-semibold text-gray-700 mb-1">
             When do the exams start?
@@ -97,7 +207,7 @@ export function ConfigurationPanel({
             type="date"
             value={startDate}
             onChange={(e) => setStartDate(e.target.value)}
-            className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all bg-gray-50"
+            className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 outline-none transition-all bg-gray-50 font-medium"
           />
         </div>
 
@@ -145,92 +255,6 @@ export function ConfigurationPanel({
             className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none transition-all bg-gray-50 text-sm"
           />
           <p className="text-[10px] text-gray-400 mt-1">Select a date for students with unresolved conflicts.</p>
-        </div>
-
-        <div className={isLateMode ? 'p-4 bg-blue-50 rounded-xl border-2 border-blue-200 ring-4 ring-blue-50/50 space-y-4' : 'space-y-4'}>
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1 flex items-center gap-2">
-              <Settings className={`w-4 h-4 ${isLateMode ? 'text-blue-600 animate-pulse' : 'text-blue-400'}`} />
-              {isLateMode ? 'Option A: Select from History' : 'Match with Old History (Optional)'}
-            </label>
-            <select
-              value={baseWorkspaceId}
-              disabled={uploadedBaseRecords.length > 0}
-              onChange={(e) => setBaseWorkspaceId(e.target.value)}
-              className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all text-sm ${
-                isLateMode && !baseWorkspaceId && uploadedBaseRecords.length === 0
-                  ? 'border-red-300 bg-red-50 text-red-900' 
-                  : (uploadedBaseRecords.length > 0 ? 'bg-gray-100 cursor-not-allowed border-gray-200' : 'border-gray-300 bg-gray-50 text-gray-900')
-              }`}
-            >
-              <option value="">{isLateMode ? '-- Choose Datesheet --' : 'No History Selected'}</option>
-              {availableWorkspaces.map(ws => (
-                <option key={ws.id} value={ws.id}>
-                  {ws.name} ({new Date(ws.createdAt).toLocaleDateString()})
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="relative flex items-center justify-center py-2">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-gray-200"></div>
-            </div>
-            <span className="relative px-2 bg-transparent text-[10px] font-black text-gray-400 uppercase tracking-widest">OR</span>
-          </div>
-
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1 flex items-center gap-2">
-              <Upload className={`w-4 h-4 ${isLateMode && uploadedBaseRecords.length > 0 ? 'text-green-600' : 'text-blue-400'}`} />
-              {isLateMode ? 'Option B: Upload Old Datesheet (Excel)' : 'Upload Old Datesheet (Optional)'}
-            </label>
-            {uploadedBaseRecords.length > 0 ? (
-              <div className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-xl">
-                <div className="flex items-center gap-2">
-                  <FileSpreadsheet className="w-5 h-5 text-green-600" />
-                  <div>
-                    <p className="text-xs font-bold text-green-900">Base File Uploaded</p>
-                    <p className="text-[10px] text-green-700">{uploadedBaseRecords.length} courses matched</p>
-                  </div>
-                </div>
-                <button 
-                  onClick={() => setUploadedBaseRecords([])}
-                  className="p-1 hover:bg-green-100 rounded-full transition-colors"
-                >
-                  <X className="w-4 h-4 text-green-700" />
-                </button>
-              </div>
-            ) : (
-              <label className={`flex items-center justify-center gap-2 w-full px-4 py-3 border-2 border-dashed rounded-xl cursor-pointer transition-all ${
-                isLateMode && !baseWorkspaceId 
-                  ? 'bg-blue-50 border-blue-300 text-blue-600 hover:bg-blue-100' 
-                  : 'bg-gray-50 border-gray-300 text-gray-500 hover:bg-gray-100'
-              }`}>
-                {isProcessingBase ? (
-                  <div className="w-5 h-5 border-2 border-gray-300 border-t-blue-600 rounded-full animate-spin"></div>
-                ) : (
-                  <Upload className="w-4 h-4" />
-                )}
-                <span className="text-xs font-bold">{isProcessingBase ? 'Processing...' : 'Upload Excel File'}</span>
-                <input 
-                  type="file" 
-                  className="hidden" 
-                  accept=".xlsx, .xls" 
-                  onChange={handleBaseFileUpload}
-                  disabled={isProcessingBase || baseWorkspaceId !== ''}
-                />
-              </label>
-            )}
-            {baseWorkspaceId && !uploadedBaseRecords.length && (
-               <p className="text-[10px] text-amber-600 font-bold mt-1 tracking-tight italic">Using history (Option A selection)</p>
-            )}
-          </div>
-
-          <p className={`text-[10px] mt-1 ${isLateMode ? 'text-blue-700 font-bold' : 'text-gray-400'}`}>
-            {isLateMode 
-              ? 'Selection is must: System needs a reference to match dates.' 
-              : 'Matched subjects will retain their original Date/Session from the reference.'}
-          </p>
         </div>
 
         <div className="flex items-center bg-blue-50 p-3 rounded-lg border border-blue-100">
