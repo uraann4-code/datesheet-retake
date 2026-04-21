@@ -1,7 +1,8 @@
 import React from 'react';
-import { Download, AlertTriangle, CheckCircle2, FileSpreadsheet, FileText, Building2, CalendarDays } from 'lucide-react';
+import { Download, AlertTriangle, CheckCircle2, FileSpreadsheet, FileText, Building2, CalendarDays, Plus } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { ApprovableRecord } from './ApprovalPanel';
+import { processExcelData } from '../lib/excelProcessor';
 
 interface ResultsTableProps {
   data: any[];
@@ -11,6 +12,8 @@ interface ResultsTableProps {
   totalStudents: number;
   unresolvedConflicts: { student: string; course1: string; course2: string }[];
   examType?: 'mid' | 'final';
+  onLateRegistrations: (data: any[]) => void;
+  isLoading?: boolean;
 }
 
 export function ResultsTable({
@@ -21,6 +24,8 @@ export function ResultsTable({
   totalStudents,
   unresolvedConflicts,
   examType,
+  onLateRegistrations,
+  isLoading,
 }: ResultsTableProps) {
   const handleExportDatesheet = () => {
     if (!data || data.length === 0) return;
@@ -208,6 +213,45 @@ export function ResultsTable({
               <CalendarDays className="w-5 h-5" />
               Download Datesheet
             </button>
+            
+            {/* Late Registration Upload */}
+            <div className="relative">
+              <label 
+                className={`flex items-center justify-center gap-2 px-6 py-3 border-2 rounded-xl transition-all font-bold text-base whitespace-nowrap shadow-sm ${
+                  isLoading 
+                    ? 'bg-gray-100 border-gray-300 text-gray-400 cursor-not-allowed' 
+                    : 'bg-white text-blue-600 border-blue-600 hover:bg-blue-50 cursor-pointer'
+                }`}
+              >
+                {isLoading ? (
+                  <div className="w-5 h-5 border-2 border-gray-300 border-t-blue-600 rounded-full animate-spin"></div>
+                ) : (
+                  <Plus className="w-5 h-5" />
+                )}
+                {isLoading ? 'Processing...' : 'Add Late Registrations'}
+                {!isLoading && (
+                  <input
+                    type="file"
+                    className="hidden"
+                    accept=".xlsx, .xls, .csv"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      const reader = new FileReader();
+                      reader.onload = (event) => {
+                        const binary = new Uint8Array(event.target?.result as ArrayBuffer);
+                        const workbook = XLSX.read(binary, { type: 'array' });
+                        const sheetName = workbook.SheetNames[0];
+                        const jsonData = processExcelData(workbook, sheetName);
+                        onLateRegistrations(jsonData);
+                      };
+                      reader.readAsArrayBuffer(file);
+                    }}
+                  />
+                )}
+              </label>
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 w-full lg:w-auto">
               <button
                 onClick={handleExportDGIC}

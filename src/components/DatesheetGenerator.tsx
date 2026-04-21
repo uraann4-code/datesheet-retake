@@ -84,6 +84,30 @@ export function DatesheetGenerator({ workspaceId: initialWorkspaceId }: Dateshee
     setIsSyncing(false);
   };
 
+  const handleLateDataLoaded = async (jsonData: any[]) => {
+    setIsSyncing(true);
+    
+    // Process new records as late registrations
+    const newLateRecords = jsonData.map((row, index) => ({
+      ...row,
+      _id: `late_${Date.now()}_${index}`,
+      _status: 'late_approved' as any // Automatically approve late registrations for the current datesheet
+    }));
+
+    // Merge with existing records
+    const updatedRecords = [...records, ...newLateRecords];
+    setRecords(updatedRecords);
+    
+    // Update Firestore if we have a workspace
+    if (workspaceId) {
+      await createWorkspace(workspaceId, `Datesheet ${new Date().toLocaleDateString()}`, updatedRecords);
+    }
+    
+    // Automatically re-generate the schedule with the new late records
+    handleGenerate(updatedRecords);
+    setIsSyncing(false);
+  };
+
   const handleGenerate = (recordsToUse?: ApprovableRecord[]) => {
     const sourceRecords = recordsToUse || records;
     const approvedRecords = sourceRecords
@@ -460,6 +484,8 @@ export function DatesheetGenerator({ workspaceId: initialWorkspaceId }: Dateshee
                       totalStudents={result.totalStudents}
                       unresolvedConflicts={result.unresolvedConflicts}
                       examType={examType}
+                      onLateRegistrations={handleLateDataLoaded}
+                      isLoading={isSyncing}
                     />
                   )
                 ) : null}

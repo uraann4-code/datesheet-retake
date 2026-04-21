@@ -212,23 +212,14 @@ export function generateSchedule(
   courses.forEach((course) => {
     let assignedSlot = -1;
 
-    // 1. Try to keep previous assignment
+    // 1. Force keep previous assignment for consistency in late registrations
     const prevSlotIndex = previousAssignments.get(course.matchId);
     if (prevSlotIndex !== undefined) {
-      let hasConflict = false;
-      const neighbors = conflicts.get(course.matchId)!;
-      neighbors.forEach((neighbor) => {
-        if (slotAssignments.get(neighbor) === prevSlotIndex) {
-          hasConflict = true;
-        }
-      });
-
-      if (!hasConflict) {
-        assignedSlot = prevSlotIndex;
-      }
+      // In late registration mode, we MUST NOT change existing dates for existing subjects
+      assignedSlot = prevSlotIndex;
     }
 
-    // 2. If no previous assignment or it caused a conflict, find the best available slot
+    // 2. Find the best available slot for NEW subjects
     if (assignedSlot === -1) {
       let preferredIndices: number[] = [];
       if (course.isMS) {
