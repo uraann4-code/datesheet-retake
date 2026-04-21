@@ -23,6 +23,7 @@ export default function App() {
   // View management
   const [currentWorkspaceId, setCurrentWorkspaceId] = useState<string | null>(null);
   const [isStartingNew, setIsStartingNew] = useState(false);
+  const [isLateMode, setIsLateMode] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (u) => {
@@ -89,11 +90,19 @@ export default function App() {
   const handleStartNew = () => {
     setCurrentWorkspaceId(null);
     setIsStartingNew(true);
+    setIsLateMode(false);
+  };
+
+  const handleStartLate = () => {
+    setCurrentWorkspaceId(null);
+    setIsStartingNew(true);
+    setIsLateMode(true);
   };
 
   const handleGoBack = () => {
     setCurrentWorkspaceId(null);
     setIsStartingNew(false);
+    setIsLateMode(false);
   };
 
   if (loading) {
@@ -219,9 +228,13 @@ export default function App() {
       </div>
 
       {!currentWorkspaceId && !isStartingNew ? (
-        <Dashboard onSelectWorkspace={handleSelectWorkspace} onStartNew={handleStartNew} />
+        <Dashboard 
+          onSelectWorkspace={handleSelectWorkspace} 
+          onStartNew={handleStartNew} 
+          onStartLate={handleStartLate}
+        />
       ) : (
-        <DatesheetGenerator workspaceId={currentWorkspaceId} />
+        <DatesheetGenerator workspaceId={currentWorkspaceId} isLateMode={isLateMode} />
       )}
     </div>
   );

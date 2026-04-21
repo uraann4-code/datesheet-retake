@@ -11,14 +11,18 @@ type Step = 'upload' | 'approve' | 'results';
 
 interface DatesheetGeneratorProps {
   workspaceId?: string | null;
+  isLateMode?: boolean;
 }
 
-export function DatesheetGenerator({ workspaceId: initialWorkspaceId }: DatesheetGeneratorProps) {
+export function DatesheetGenerator({ 
+  workspaceId: initialWorkspaceId,
+  isLateMode = false
+}: DatesheetGeneratorProps) {
   const [records, setRecords] = useState<ApprovableRecord[]>([]);
   const [step, setStep] = useState<Step>('upload');
   const [workspaceId, setWorkspaceId] = useState<string | null>(initialWorkspaceId || null);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [directSchedule, setDirectSchedule] = useState(false);
+  const [directSchedule, setDirectSchedule] = useState(isLateMode); // Default to direct for late
   const [examType, setExamType] = useState<ExamType>('final');
   
   const [startDate, setStartDate] = useState<string>(
@@ -227,9 +231,21 @@ export function DatesheetGenerator({ workspaceId: initialWorkspaceId }: Dateshee
   const approvedCount = records.filter(r => r._status === 'approved' || r._status === 'late_approved').length;
 
   const steps = [
-    { id: 'upload', title: '1. Upload Data', desc: 'Import Excel file' },
-    { id: 'approve', title: '2. Review Cases', desc: 'Approve or Reject' },
-    { id: 'results', title: '3. Download', desc: 'Get your files' }
+    { 
+      id: 'upload', 
+      title: isLateMode ? '1. Upload Late' : '1. Upload Data', 
+      desc: isLateMode ? 'Naye bacho ki list' : 'Import Excel file' 
+    },
+    { 
+      id: 'approve', 
+      title: isLateMode ? '2. Match Old' : '2. Review Cases', 
+      desc: isLateMode ? 'Base datesheet select kren' : 'Approve or Reject' 
+    },
+    { 
+      id: 'results', 
+      title: '3. Download', 
+      desc: 'Get your files' 
+    }
   ];
 
   return (
@@ -244,7 +260,7 @@ export function DatesheetGenerator({ workspaceId: initialWorkspaceId }: Dateshee
             <div>
               <div className="flex items-center gap-3">
                 <h1 className="text-3xl font-bold text-gray-900">
-                  Datesheet Generator
+                  {isLateMode ? 'Late Registration Portal' : 'Datesheet Generator'}
                 </h1>
                 {isSyncing ? (
                   <span className="flex items-center gap-1 text-xs font-medium text-blue-600 bg-blue-50 px-2 py-1 rounded-full">
@@ -257,7 +273,9 @@ export function DatesheetGenerator({ workspaceId: initialWorkspaceId }: Dateshee
                 ) : null}
               </div>
               <p className="text-gray-500 mt-1">
-                Generate conflict-free exam schedules with manual or direct approval.
+                {isLateMode 
+                  ? 'Incorporate late registrations into your existing exam schedule seamlessly.' 
+                  : 'Generate conflict-free exam schedules with manual or direct approval.'}
               </p>
             </div>
           </div>
@@ -305,8 +323,8 @@ export function DatesheetGenerator({ workspaceId: initialWorkspaceId }: Dateshee
           {/* Left Column: Configuration */}
           <div className="lg:col-span-1 space-y-6">
             <div className={`bg-white p-6 rounded-xl shadow-sm border border-gray-100 ${step !== 'upload' ? 'opacity-70' : ''}`}>
-              <h3 className="text-lg font-semibold text-gray-800 mb-4">
-                1. Upload Data
+              <h3 className="text-lg font-semibold text-gray-800 mb-4 tracking-tight">
+                {isLateMode ? '1. Upload Late List' : '1. Upload Data'}
               </h3>
               
               <div className="mb-6 p-4 bg-gray-50 rounded-2xl border border-gray-200">
@@ -435,7 +453,13 @@ export function DatesheetGenerator({ workspaceId: initialWorkspaceId }: Dateshee
               setBaseWorkspaceId={setBaseWorkspaceId}
               availableWorkspaces={availableWorkspaces}
               onGenerate={() => handleGenerate()}
-              isReady={records.length > 0 && approvedCount > 0 && !isGenerating}
+              isReady={
+                records.length > 0 && 
+                approvedCount > 0 && 
+                !isGenerating && 
+                (!isLateMode || (isLateMode && baseWorkspaceId))
+              }
+              isLateMode={isLateMode}
             />
             
             {records.length > 0 && approvedCount === 0 && step === 'approve' && (

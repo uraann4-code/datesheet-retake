@@ -17,6 +17,7 @@ interface ConfigurationPanelProps {
   availableWorkspaces: any[];
   onGenerate: () => void;
   isReady: boolean;
+  isLateMode?: boolean;
 }
 
 export function ConfigurationPanel({
@@ -35,6 +36,7 @@ export function ConfigurationPanel({
   availableWorkspaces,
   onGenerate,
   isReady,
+  isLateMode,
 }: ConfigurationPanelProps) {
   return (
     <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 space-y-6">
@@ -105,24 +107,32 @@ export function ConfigurationPanel({
           <p className="text-[10px] text-gray-400 mt-1">Select a date for students with unresolved conflicts.</p>
         </div>
 
-        <div>
+        <div className={isLateMode ? 'p-4 bg-blue-50 rounded-xl border-2 border-blue-200 ring-4 ring-blue-50/50' : ''}>
           <label className="block text-sm font-semibold text-gray-700 mb-1 flex items-center gap-2">
-            <Settings className="w-4 h-4 text-blue-400" />
-            Match with Old Datesheet (Optional)
+            <Settings className={`w-4 h-4 ${isLateMode ? 'text-blue-600 animate-pulse' : 'text-blue-400'}`} />
+            {isLateMode ? 'Select Existing Datesheet (Required for Matching)' : 'Match with Old Datesheet (Optional)'}
           </label>
           <select
             value={baseWorkspaceId}
             onChange={(e) => setBaseWorkspaceId(e.target.value)}
-            className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all bg-gray-50 text-sm"
+            className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all text-sm ${
+              isLateMode && !baseWorkspaceId 
+                ? 'border-red-300 bg-red-50 text-red-900 animate-bounce' 
+                : 'border-gray-300 bg-gray-50 text-gray-900'
+            }`}
           >
-            <option value="">No Base Datesheet</option>
+            <option value="">{isLateMode ? '-- Choose Datesheet to Match --' : 'No Base Datesheet'}</option>
             {availableWorkspaces.map(ws => (
               <option key={ws.id} value={ws.id}>
                 {ws.name} ({new Date(ws.createdAt).toLocaleDateString()})
               </option>
             ))}
           </select>
-          <p className="text-[10px] text-gray-400 mt-1">If selected, subjects appearing in both will keep the old dates.</p>
+          <p className={`text-[10px] mt-1 ${isLateMode ? 'text-blue-700 font-bold' : 'text-gray-400'}`}>
+            {isLateMode 
+              ? 'Crucial: System will ensure old subjects keep their original dates.' 
+              : 'If selected, subjects appearing in both will keep the old dates.'}
+          </p>
         </div>
 
         <div className="flex items-center bg-blue-50 p-3 rounded-lg border border-blue-100">

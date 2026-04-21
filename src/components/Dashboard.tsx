@@ -6,9 +6,10 @@ import { format } from 'date-fns';
 interface DashboardProps {
   onSelectWorkspace: (id: string) => void;
   onStartNew: () => void;
+  onStartLate: () => void;
 }
 
-export function Dashboard({ onSelectWorkspace, onStartNew }: DashboardProps) {
+export function Dashboard({ onSelectWorkspace, onStartNew, onStartLate }: DashboardProps) {
   const [workspaces, setWorkspaces] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -60,13 +61,22 @@ export function Dashboard({ onSelectWorkspace, onStartNew }: DashboardProps) {
           <h1 className="text-3xl font-black text-gray-900 tracking-tight">Datesheet History</h1>
           <p className="text-gray-500 font-medium mt-1">Manage and view your previous exam schedules.</p>
         </div>
-        <button
-          onClick={onStartNew}
-          className="flex items-center gap-2 px-6 py-3.5 bg-blue-600 text-white rounded-2xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-200 font-black text-base"
-        >
-          <Plus className="w-5 h-5" />
-          Start New Datesheet
-        </button>
+        <div className="flex flex-wrap gap-3 w-full sm:w-auto">
+          <button
+            onClick={onStartLate}
+            className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-3.5 bg-white text-blue-600 border-2 border-blue-600 rounded-2xl hover:bg-blue-50 transition-all font-black text-base shadow-sm"
+          >
+            <Clock className="w-5 h-5" />
+            Late Registration
+          </button>
+          <button
+            onClick={onStartNew}
+            className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-3.5 bg-blue-600 text-white rounded-2xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-200 font-black text-base"
+          >
+            <Plus className="w-5 h-5" />
+            Start New Datesheet
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
