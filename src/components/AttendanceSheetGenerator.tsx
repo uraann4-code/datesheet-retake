@@ -12,7 +12,7 @@ interface AttendanceSheetGeneratorProps {
 export function AttendanceSheetGenerator({ onClose }: AttendanceSheetGeneratorProps) {
   const [sourceData, setSourceData] = useState<any[]>([]);
   const [roomCapacity, setRoomCapacity] = useState(30);
-  const [isProcessing, setIsProcessing] = useState(false);
+  const [isProcessing, setIsProcessing] = useState<'pdf' | 'excel' | null>(null);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -25,7 +25,6 @@ export function AttendanceSheetGenerator({ onClose }: AttendanceSheetGeneratorPr
         const workbook = XLSX.read(binary, { type: 'array', cellDates: true });
         const sheetName = workbook.SheetNames[0];
         
-        // Try raw json with formatted dates
         const worksheet = workbook.Sheets[sheetName];
         const jsonData = XLSX.utils.sheet_to_json(worksheet, { raw: false, dateNF: 'dd-mmm-yyyy' });
         
@@ -36,7 +35,7 @@ export function AttendanceSheetGenerator({ onClose }: AttendanceSheetGeneratorPr
         setSourceData(jsonData);
       } catch (err) {
         console.error(err);
-        alert("Failed to process file.");
+        alert("Failed to process file. Please ensure it is a valid Excel file.");
       }
     };
     reader.readAsArrayBuffer(file);
@@ -44,25 +43,32 @@ export function AttendanceSheetGenerator({ onClose }: AttendanceSheetGeneratorPr
 
   const generateAttendanceSheets = async (format: 'pdf' | 'excel' = 'pdf') => {
     if (sourceData.length === 0) {
-      alert("Please upload your data file.");
+      alert("Please upload your data file first.");
       return;
     }
 
     setIsProcessing(format);
+    // Give UI a moment to update
+    await new Promise(resolve => setTimeout(resolve, 100));
+
     try {
-      // Robust key finding
+      // Improved robust key finding
       const findKey = (data: any[], terms: string[]) => {
         const keys = Object.keys(data[0] || {});
+        // Try exact match first
+        const exact = keys.find(k => terms.some(t => k.toLowerCase() === t.toLowerCase()));
+        if (exact) return exact;
+        // Then try includes
         return keys.find(k => terms.some(t => k.toLowerCase().includes(t.toLowerCase()))) || terms[0];
       };
 
-      const dateKey = findKey(sourceData, ['date']);
-      const sessionKey = findKey(sourceData, ['session']);
-      const nameKey = findKey(sourceData, ['name', 'student']);
-      const enrolKey = findKey(sourceData, ['enrollment', 'reg', 'enrol']);
-      const classKey = findKey(sourceData, ['class', 'program', 'discipline']);
-      const subKey = findKey(sourceData, ['subject', 'course', 'title']);
-      const teacherKey = findKey(sourceData, ['teacher', 'faculty']);
+      const dateKey = findKey(sourceData, ['date', 'exam date', 'dated']);
+      const sessionKey = findKey(sourceData, ['session', 'exam session', 'time']);
+      const nameKey = findKey(sourceData, ['name', 'student name', 'student']);
+      const enrolKey = findKey(sourceData, ['enrollment', 'reg', 'enrollment no', 'registration no']);
+      const classKey = findKey(sourceData, ['class', 'program', 'discipline', 'section']);
+      const subKey = findKey(sourceData, ['subject', 'course', 'course title', 'title']);
+      const teacherKey = findKey(sourceData, ['teacher', 'faculty', 'instructor', 'teacher name']);
 
       // Group students by Date and Session
       const sessions: Record<string, any[]> = {};
@@ -78,9 +84,13 @@ export function AttendanceSheetGenerator({ onClose }: AttendanceSheetGeneratorPr
       });
 
       const sessionKeys = Object.keys(sessions).sort((a, b) => a.localeCompare(b));
+      
+      if (sessionKeys.length === 0) {
+        throw new Error("No valid Date and Session columns found. Please ensure your file has 'Date' and 'Session' columns.");
+      }
 
       if (format === 'pdf') {
-        const pdf = new jsPDF('l', 'mm', 'a4'); // LANDSCAPE
+        const pdf = new jsPDF('l', 'mm', 'a4');
         let isFirstPage = true;
 
         for (const key of sessionKeys) {
@@ -96,7 +106,7 @@ export function AttendanceSheetGenerator({ onClose }: AttendanceSheetGeneratorPr
             const roomStudents = sessionStudents.slice(startIdx, startIdx + roomCapacity);
             const roomNumber = roomIdx + 1;
 
-            // LANDSCAPE WIDTH: 297mm
+            // Header - Landscape A4 is ~297mm wide
             pdf.setFontSize(16);
             pdf.setFont('helvetica', 'bold');
             pdf.text('BAHRIA UNIVERSITY - ISLAMABAD CAMPUS', 148.5, 15, { align: 'center' });
@@ -111,7 +121,7 @@ export function AttendanceSheetGenerator({ onClose }: AttendanceSheetGeneratorPr
 
             const tableHeaders = [['S#', 'NAME', 'ENROLLMENT NO', 'CLASS', 'SUBJECT', 'TEACHER NAME', 'SHEET #', 'SIGN']];
             const tableData = roomStudents.map((s, idx) => [
-              idx + 1,
+              (startIdx + idx + 1), // Global index or local? User requested S# as local usually but global is better for large lists. Let's keep global for tracking.
               s[nameKey] || '',
               s[enrolKey] || '',
               s[classKey] || '',
@@ -126,9 +136,9 @@ export function AttendanceSheetGenerator({ onClose }: AttendanceSheetGeneratorPr
               body: tableData,
               startY: 38,
               theme: 'grid',
-              headStyles: { fillColor: [255, 255, 255], textColor: [0, 0, 0], lineWidth: 0.1, fontStyle: 'bold' },
+              headStyles: { fillColor: [245, 245, 245], textColor: [0, 0, 0], lineWidth: 0.1, fontStyle: 'bold' },
               bodyStyles: { textColor: [0, 0, 0], lineWidth: 0.1, minCellHeight: 12 },
-              styles: { fontSize: 8.5, cellPadding: 3 },
+              styles: { fontSize: 8.5, cellPadding: 3, font: 'helvetica' },
               columnStyles: {
                 0: { cellWidth: 12 },
                 1: { cellWidth: 50 },
@@ -141,8 +151,8 @@ export function AttendanceSheetGenerator({ onClose }: AttendanceSheetGeneratorPr
               }
             });
 
-            pdf.setFontSize(9);
-            pdf.text(`Page 1 of 1`, 148.5, 200, { align: 'center' });
+            pdf.setFontSize(8);
+            pdf.text(`Generated by Exam Tool | Page ${roomIdx + 1} for this session`, 148.5, 205, { align: 'center' });
           }
         }
         pdf.save(`Attendance_Landscape_${new Date().getTime()}.pdf`);
@@ -152,7 +162,6 @@ export function AttendanceSheetGenerator({ onClose }: AttendanceSheetGeneratorPr
         sessionKeys.forEach(key => {
           const [date, session] = key.split('|');
           const sessionStudents = sessions[key];
-          const totalRooms = Math.ceil(sessionStudents.length / roomCapacity);
 
           sessionStudents.forEach((s, idx) => {
             const roomNumber = Math.floor(idx / roomCapacity) + 1;
@@ -160,7 +169,7 @@ export function AttendanceSheetGenerator({ onClose }: AttendanceSheetGeneratorPr
               'Date': date,
               'Session': session,
               'Room #': roomNumber,
-              'S#': (idx % roomCapacity) + 1,
+              'S#': (idx + 1),
               'Name': s[nameKey] || '',
               'Enrollment': s[enrolKey] || '',
               'Class': s[classKey] || '',
@@ -177,11 +186,11 @@ export function AttendanceSheetGenerator({ onClose }: AttendanceSheetGeneratorPr
       }
       
       alert(`${format.toUpperCase()} generated successfully!`);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      alert(`Error generating ${format}.`);
+      alert(`Error generating ${format}: ${err.message || 'Unknown error'}`);
     } finally {
-      setIsProcessing(false);
+      setIsProcessing(null);
     }
   };
 
@@ -264,29 +273,37 @@ export function AttendanceSheetGenerator({ onClose }: AttendanceSheetGeneratorPr
           </button>
           
           <button 
-            disabled={isProcessing === 'excel' || !sourceData.length}
+            disabled={isProcessing !== null || !sourceData.length}
             onClick={() => generateAttendanceSheets('excel')}
             className={`flex-1 min-w-[180px] py-4 px-6 font-black rounded-2xl transition-all shadow-lg uppercase tracking-widest text-xs flex items-center justify-center gap-2 ${
-              isProcessing === 'excel' || !sourceData.length
+              isProcessing !== null || !sourceData.length
                 ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
                 : 'bg-green-600 text-white hover:bg-green-700 shadow-green-200'
             }`}
           >
-            <FileSpreadsheet className="w-5 h-5" />
-            Excel Export
+            {isProcessing === 'excel' ? (
+              <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            ) : (
+              <FileSpreadsheet className="w-5 h-5" />
+            )}
+            {isProcessing === 'excel' ? 'Processing...' : 'Excel Export'}
           </button>
 
           <button 
-            disabled={isProcessing === 'pdf' || !sourceData.length}
+            disabled={isProcessing !== null || !sourceData.length}
             onClick={() => generateAttendanceSheets('pdf')}
             className={`flex-[1.5] min-w-[200px] py-4 px-6 font-black rounded-2xl transition-all shadow-xl uppercase tracking-widest text-xs flex items-center justify-center gap-2 ${
-              isProcessing === 'pdf' || !sourceData.length
+              isProcessing !== null || !sourceData.length
                 ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
                 : 'bg-blue-600 text-white hover:bg-blue-700 shadow-blue-200'
             }`}
           >
-            <FileText className="w-5 h-5" />
-            Landscape PDF
+            {isProcessing === 'pdf' ? (
+              <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            ) : (
+              <FileText className="w-5 h-5" />
+            )}
+            {isProcessing === 'pdf' ? 'Generating PDF...' : 'Landscape PDF'}
           </button>
         </div>
       </div>
