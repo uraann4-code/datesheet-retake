@@ -126,21 +126,38 @@ export function unmergeAndFill(wb: XLSX.WorkBook, sheetName: string): any[] {
 export function sortRecordsByRecommendation(data: any[]): any[] {
   if (data.length === 0) return data;
   
-  // Try to find a recommendation column
+  // Try to find a recommendation column (Look for Remarks, Decision, Status, etc.)
   const keys = Object.keys(data[0]);
-  const recKey = keys.find(k => k.toLowerCase().match(/recommend|status|decision|result/));
+  const recKey = keys.find(k => k.toLowerCase().match(/remark|recommend|status|decision|result/));
   
   if (!recKey) return data;
 
   return [...data].sort((a, b) => {
-    const valA = String(a[recKey] || "").toLowerCase();
-    const valB = String(b[recKey] || "").toLowerCase();
+    const valA = String(a[recKey] || "").toLowerCase().trim();
+    const valB = String(b[recKey] || "").toLowerCase().trim();
     
-    const isARec = valA.includes("recommended") && !valA.includes("not");
-    const isBRec = valB.includes("recommended") && !valB.includes("not");
+    // Check for "Recommended" (must not contain "not")
+    const aIsRecommended = valA.includes("recommended") && !valA.includes("not");
+    const bIsRecommended = valB.includes("recommended") && !valB.includes("not");
     
-    if (isARec && !isBRec) return -1;
-    if (!isARec && isBRec) return 1;
-    return 0;
+    // Check for "Not Recommended"
+    const aIsNotRecommended = valA.includes("not recommended") || (valA.includes("not") && valA.includes("recommended"));
+    const bIsNotRecommended = valB.includes("not recommended") || (valB.includes("not") && valB.includes("recommended"));
+
+    // Priority ordering: 
+    // 1. Recommended
+    // 2. Everything else (Pending, etc.)
+    // 3. Not Recommended
+
+    const getPriority = (isRec: boolean, isNotRec: boolean) => {
+      if (isRec) return 1;
+      if (isNotRec) return 3;
+      return 2;
+    };
+
+    const priorityA = getPriority(aIsRecommended, aIsNotRecommended);
+    const priorityB = getPriority(bIsRecommended, bIsNotRecommended);
+
+    return priorityA - priorityB;
   });
 }
