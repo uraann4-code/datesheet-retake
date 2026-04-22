@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
-import { Layers, ListFilter, Download, FileSpreadsheet, Upload, CheckCircle2, X } from 'lucide-react';
+import { Layers, ListFilter, Download, FileSpreadsheet, Upload, CheckCircle2, X, Users } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { unmergeAndFill, sortRecordsByRecommendation } from '../lib/excelProcessor';
+import { AttendanceSheetGenerator } from './AttendanceSheetGenerator';
 
 export function DataTools() {
   const [isProcessing, setIsProcessing] = useState<string | null>(null);
+  const [showAttendanceModal, setShowAttendanceModal] = useState(false);
 
   const handleTool = async (tool: 'unmerge' | 'sort' | 'dgic') => {
     const input = document.createElement('input');
@@ -155,7 +157,26 @@ export function DataTools() {
             <p className="text-xs text-gray-500">Convert any list into the official DGIC approval format.</p>
           </div>
         </button>
+
+        {/* Tool 4: Attendance Sheets */}
+        <button
+          onClick={() => setShowAttendanceModal(true)}
+          disabled={isProcessing !== null}
+          className="group flex items-center gap-4 p-4 border border-gray-100 rounded-xl hover:border-blue-200 hover:bg-blue-50 transition-all text-left"
+        >
+          <div className="p-3 bg-blue-100 text-blue-600 rounded-xl group-hover:bg-blue-600 group-hover:text-white transition-colors">
+             <Users className="w-6 h-6" />
+          </div>
+          <div className="flex-1">
+            <p className="font-bold text-gray-900 group-hover:text-blue-700">4. Make Attendance Sheets</p>
+            <p className="text-xs text-gray-500">Create room-wise attendance PDFs from datesheet & student data.</p>
+          </div>
+        </button>
       </div>
+
+      {showAttendanceModal && (
+        <AttendanceSheetGenerator onClose={() => setShowAttendanceModal(false)} />
+      )}
 
       <div className="p-3 bg-amber-50 rounded-xl border border-amber-100">
         <p className="text-[10px] text-amber-800 font-bold leading-tight">
