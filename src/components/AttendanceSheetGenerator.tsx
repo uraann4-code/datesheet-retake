@@ -155,7 +155,7 @@ export function AttendanceSheetGenerator({ onClose }: AttendanceSheetGeneratorPr
             pdf.text('BAHRIA UNIVERSITY - ISLAMABAD CAMPUS', 148.5, 15, { align: 'center' });
             
             pdf.setFontSize(12);
-            pdf.text('ATTENDANCE-SHEET - RE-TAKE EXAM SEMESTER', 148.5, 22, { align: 'center' });
+            pdf.text('ATTENDANCE-SHEET - RE-TAKE MID TERM SPRING-2026 SEMESTER', 148.5, 22, { align: 'center' });
 
             pdf.setFontSize(10);
             pdf.text(`ROOM # ${roomNumber}`, 20, 32);
@@ -164,7 +164,7 @@ export function AttendanceSheetGenerator({ onClose }: AttendanceSheetGeneratorPr
 
             const tableHeaders = [['S#', 'NAME', 'ENROLLMENT NO', 'CLASS', 'SUBJECT', 'TEACHER NAME', 'SHEET #', 'SIGN']];
             const tableData = roomStudents.map((s, idx) => [
-              (startIdx + idx + 1), // Global index or local? User requested S# as local usually but global is better for large lists. Let's keep global for tracking.
+              (startIdx + idx + 1), // Global index
               s[nameKey] || '',
               s[enrolKey] || '',
               s[classKey] || '',
@@ -200,7 +200,7 @@ export function AttendanceSheetGenerator({ onClose }: AttendanceSheetGeneratorPr
         }
         pdf.save(`Attendance_Landscape_${new Date().getTime()}.pdf`);
       } else {
-        // EXCEL EXPORT - Separate sheet for each date, session, and room
+        // EXCEL EXPORT - Exact template structure
         const wb = XLSX.utils.book_new();
         
         sessionKeys.forEach(key => {
@@ -214,22 +214,48 @@ export function AttendanceSheetGenerator({ onClose }: AttendanceSheetGeneratorPr
             const roomStudents = sessionStudents.slice(startIdx, startIdx + roomCapacity);
             const roomNumber = roomIdx + 1;
 
-            const sheetData = roomStudents.map((s, idx) => ({
-              'S#': idx + 1,
-              'Name': s[nameKey] || '',
-              'Enrollment': s[enrolKey] || '',
-              'Class': s[classKey] || '',
-              'Subject': s[subKey] || '',
-              'Teacher': s[teacherKey] || ''
-            }));
+            // BAHRIA UNIVERSITY - ISLAMABAD CAMPUS,,,,,,,
+            // ATTENDANCE-SHEET - RE-TAKE MID TERM SPRING-2026 SEMESTER,,,,,,,
+            // ,,ROOM # ,,Dated:             Session - I,,,
+            // S#,NAME,ENROLLMENT NO,CLASS,SUBJECT,TEACHER NAME,SHEET #,SIGN
+            const aoa = [
+              ['BAHRIA UNIVERSITY - ISLAMABAD CAMPUS', '', '', '', '', '', '', ''],
+              ['ATTENDANCE-SHEET - RE-TAKE MID TERM SPRING-2026 SEMESTER', '', '', '', '', '', '', ''],
+              ['', '', `ROOM # ${roomNumber}`, '', `Dated: ${date}`, '', `Session - ${session}`, ''],
+              ['S#', 'NAME', 'ENROLLMENT NO', 'CLASS', 'SUBJECT', 'TEACHER NAME', 'SHEET #', 'SIGN']
+            ];
 
-            const ws = XLSX.utils.json_to_sheet(sheetData);
-            
-            // Excel sheet name limits: 31 chars, no \ / ? * [ ] :
+            roomStudents.forEach((s, idx) => {
+              aoa.push([
+                idx + 1,
+                s[nameKey] || '',
+                s[enrolKey] || '',
+                s[classKey] || '',
+                s[subKey] || '',
+                s[teacherKey] || '',
+                '',
+                ''
+              ]);
+            });
+
+            const ws = XLSX.utils.aoa_to_sheet(aoa);
+
+            // Column widths for readability
+            ws['!cols'] = [
+              { wch: 5 },  // S#
+              { wch: 30 }, // NAME
+              { wch: 20 }, // ENROLLMENT
+              { wch: 15 }, // CLASS
+              { wch: 30 }, // SUBJECT
+              { wch: 20 }, // TEACHER
+              { wch: 10 }, // SHEET #
+              { wch: 15 }  // SIGN
+            ];
+
+            // Excel sheet name limits: 31 chars
             let cleanDate = date.replace(/[\\/?*\[\]:]/g, '-');
             let sheetName = `${cleanDate} S-${session} R${roomNumber}`.substring(0, 31).trim();
             
-            // Ensure unique sheet name (just in case)
             if (wb.SheetNames.includes(sheetName)) {
                sheetName = (sheetName.substring(0, 27) + "_" + Math.random().toString(36).substring(2, 5)).toUpperCase();
             }
