@@ -10,13 +10,11 @@ interface AttendanceSheetGeneratorProps {
 }
 
 export function AttendanceSheetGenerator({ onClose }: AttendanceSheetGeneratorProps) {
-  const [datesheetData, setDatesheetData] = useState<any[]>([]);
   const [sourceData, setSourceData] = useState<any[]>([]);
   const [roomCapacity, setRoomCapacity] = useState(30);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [step, setStep] = useState<1 | 2>(1);
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'datesheet' | 'source') => {
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -27,18 +25,16 @@ export function AttendanceSheetGenerator({ onClose }: AttendanceSheetGeneratorPr
         const workbook = XLSX.read(binary, { type: 'array' });
         const sheetName = workbook.SheetNames[0];
         
-        let jsonData: any[] = [];
-        if (type === 'datesheet') {
-          // Datesheet just needs basic parsing
-          const worksheet = workbook.Sheets[sheetName];
-          jsonData = XLSX.utils.sheet_to_json(worksheet);
-        } else {
-          // Source data needs robust student/course parsing
-          jsonData = processExcelData(workbook, sheetName);
-        }
+        // Use robust processor to get clean data with student and course info
+        const jsonData = processExcelData(workbook, sheetName);
         
-        if (type === 'datesheet') setDatesheetData(jsonData);
-        else setSourceData(jsonData);
+        if (jsonData.length === 0) {
+          // If robust processor fails (e.g. key columns missing), try raw json as backup
+          const worksheet = workbook.Sheets[sheetName];
+          setSourceData(XLSX.utils.sheet_to_json(worksheet));
+        } else {
+          setSourceData(jsonData);
+        }
       } catch (err) {
         console.error(err);
         alert("Failed to process file.");
@@ -48,8 +44,8 @@ export function AttendanceSheetGenerator({ onClose }: AttendanceSheetGeneratorPr
   };
 
   const generateAttendanceSheets = async () => {
-    if (datesheetData.length === 0 || sourceData.length === 0) {
-      alert("Please upload both Datesheet and Source Student List.");
+    if (sourceData.length === 0) {
+      alert("Please upload your data file.");
       return;
     }
 
@@ -58,52 +54,30 @@ export function AttendanceSheetGenerator({ onClose }: AttendanceSheetGeneratorPr
       const pdf = new jsPDF('p', 'mm', 'a4');
       let isFirstPage = true;
 
-      // Group students by Subject first to match with datesheet
-      const studentsBySubject: Record<string, any[]> = {};
-      sourceData.forEach(student => {
-        const subKey = Object.keys(student).find(k => k.toLowerCase().match(/subject|course|coursename|coursetitle|sub/)) || 'Subject';
-        const subject = String(student[subKey] || "").trim().toUpperCase();
-        if (!studentsBySubject[subject]) studentsBySubject[subject] = [];
-        studentsBySubject[subject].push(student);
-      });
-
-      // Group Datesheet entries by Date and Session
+      // Group students by Date and Session
       const sessions: Record<string, any[]> = {};
-      datesheetData.forEach(entry => {
-        const date = String(entry['Date'] || "").trim();
-        const session = String(entry['Session'] || "").trim();
-        const subject = String(entry['Subject'] || entry['Course Title'] || "").trim().toUpperCase();
+      sourceData.forEach(row => {
+        const dateKey = Object.keys(row).find(k => k.toLowerCase() === 'date') || 'Date';
+        const sessionKey = Object.keys(row).find(k => k.toLowerCase() === 'session') || 'Session';
         
-        if (!date || !session || !subject) return;
-        
+        const date = String(row[dateKey] || "").trim();
+        const session = String(row[sessionKey] || "").trim();
+
+        if (!date || !session) return;
+
         const key = `${date}|${session}`;
         if (!sessions[key]) sessions[key] = [];
-        sessions[key].push({ ...entry, subject });
+        sessions[key].push(row);
       });
 
-      // Process each Session
-      for (const [key, sessionSubjects] of Object.entries(sessions)) {
+      // Process each Session Group
+      const sortedKeys = Object.keys(sessions).sort();
+      
+      for (const key of sortedKeys) {
         const [date, session] = key.split('|');
-        
-        // Collect all students for this session
-        let sessionStudents: any[] = [];
-        sessionSubjects.forEach(subEntry => {
-          const matchingStudents = studentsBySubject[subEntry.subject] || [];
-          // Add subject and teacher info to each student for the sheet
-          matchingStudents.forEach(s => {
-            sessionStudents.push({
-              ...s,
-              _date: date,
-              _session: session,
-              _subject: subEntry.subject,
-              _teacher: subEntry['Teacher Name'] || s['Teacher Name'] || s['Teacher'] || ''
-            });
-          });
-        });
+        const sessionStudents = sessions[key];
 
-        if (sessionStudents.length === 0) continue;
-
-        // Split students into rooms based on capacity
+        // Split into rooms
         const roomsCount = Math.ceil(sessionStudents.length / roomCapacity);
         
         for (let i = 0; i < roomsCount; i++) {
@@ -128,20 +102,23 @@ export function AttendanceSheetGenerator({ onClose }: AttendanceSheetGeneratorPr
           pdf.text(`Dated: ${date}`, 105, 30, { align: 'center' });
           pdf.text(`Session - ${session}`, 190, 30, { align: 'right' });
 
-          // Table Preparation
+          // Table Headers
           const tableHeaders = [['S#', 'NAME', 'ENROLLMENT NO', 'CLASS', 'SUBJECT', 'TEACHER NAME', 'SHEET #', 'SIGN']];
+          
           const tableData = roomStudents.map((s, idx) => {
             const nameKey = Object.keys(s).find(k => k.toLowerCase().match(/name/)) || 'Name';
             const enrolKey = Object.keys(s).find(k => k.toLowerCase().match(/enrollment|reg/)) || 'Enrollment';
             const classKey = Object.keys(s).find(k => k.toLowerCase().match(/class|program/)) || 'Class';
+            const subKey = Object.keys(s).find(k => k.toLowerCase().match(/subject|course|title/)) || 'Subject';
+            const teacherKey = Object.keys(s).find(k => k.toLowerCase().match(/teacher/)) || 'Teacher Name';
             
             return [
               idx + 1,
               s[nameKey] || '',
               s[enrolKey] || '',
               s[classKey] || '',
-              s._subject || '',
-              s._teacher || '',
+              s[subKey] || '',
+              s[teacherKey] || '',
               '',
               ''
             ];
@@ -167,8 +144,7 @@ export function AttendanceSheetGenerator({ onClose }: AttendanceSheetGeneratorPr
             }
           });
 
-          // Footer
-          const finalY = (pdf as any).lastAutoTable.finalY + 10;
+          pdf.setFontSize(9);
           pdf.text(`Page 1 of 1`, 105, 285, { align: 'center' });
         }
       }
@@ -185,7 +161,7 @@ export function AttendanceSheetGenerator({ onClose }: AttendanceSheetGeneratorPr
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white w-full max-w-4xl rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+      <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
         {/* Header */}
         <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-blue-600 text-white">
           <div className="flex items-center gap-3">
@@ -194,7 +170,7 @@ export function AttendanceSheetGenerator({ onClose }: AttendanceSheetGeneratorPr
             </div>
             <div>
               <h2 className="text-xl font-black">Generate Attendance Sheets</h2>
-              <p className="text-blue-100 text-xs font-bold uppercase tracking-wider">Automated Room Allocation & Formatting</p>
+              <p className="text-blue-100 text-xs font-bold uppercase tracking-wider">Automated Room Allocation</p>
             </div>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-full transition-colors">
@@ -204,50 +180,29 @@ export function AttendanceSheetGenerator({ onClose }: AttendanceSheetGeneratorPr
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-8 space-y-8">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            {/* Step 1: Upload Datesheet */}
-            <div className={`space-y-4 transition-all ${datesheetData.length > 0 ? 'opacity-100' : 'opacity-100'}`}>
-              <div className="flex items-center gap-3 mb-2">
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${datesheetData.length > 0 ? 'bg-green-100 text-green-600' : 'bg-blue-100 text-blue-600'}`}>
-                  {datesheetData.length > 0 ? <CheckCircle2 className="w-5 h-5" /> : '1'}
-                </div>
-                <h4 className="font-black text-gray-800 uppercase tracking-tight">Upload Datesheet</h4>
+          <div className="space-y-4">
+            <div className="flex items-center gap-3 mb-2">
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${sourceData.length > 0 ? 'bg-green-100 text-green-600' : 'bg-blue-100 text-blue-600'}`}>
+                {sourceData.length > 0 ? <CheckCircle2 className="w-5 h-5" /> : '1'}
               </div>
-              
-              <label className={`flex flex-col items-center justify-center gap-3 w-full p-8 border-2 border-dashed rounded-3xl cursor-pointer transition-all ${
-                datesheetData.length > 0 ? 'bg-green-50 border-green-200 text-green-600' : 'bg-gray-50 border-gray-200 text-gray-400 hover:border-blue-400 hover:bg-blue-50'
-              }`}>
-                <Upload className="w-8 h-8 opacity-50" />
-                <div className="text-center">
-                  <p className="text-sm font-black text-gray-700">{datesheetData.length > 0 ? 'Datesheet Loaded' : 'Select Datesheet File'}</p>
-                  <p className="text-[10px] uppercase font-bold tracking-widest mt-1 opacity-60">Source for Date/Session/Rooms</p>
-                </div>
-                {datesheetData.length > 0 && <p className="text-xs font-bold mt-2">{datesheetData.length} entries found</p>}
-                <input type="file" className="hidden" accept=".xlsx, .xls" onChange={(e) => handleFileUpload(e, 'datesheet')} />
-              </label>
+              <h4 className="font-black text-gray-800 uppercase tracking-tight">Upload Combined File</h4>
             </div>
-
-            {/* Step 2: Upload Student List */}
-            <div className={`space-y-4 transition-all ${sourceData.length > 0 ? 'opacity-100' : 'opacity-100'}`}>
-              <div className="flex items-center gap-3 mb-2">
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${sourceData.length > 0 ? 'bg-green-100 text-green-600' : 'bg-blue-100 text-blue-600'}`}>
-                   {sourceData.length > 0 ? <CheckCircle2 className="w-5 h-5" /> : '2'}
-                </div>
-                <h4 className="font-black text-gray-800 uppercase tracking-tight">Upload Student List</h4>
+            
+            <label className={`flex flex-col items-center justify-center gap-4 w-full p-12 border-2 border-dashed rounded-3xl cursor-pointer transition-all ${
+              sourceData.length > 0 ? 'bg-green-50 border-green-200 text-green-600' : 'bg-gray-50 border-gray-200 text-gray-400 hover:border-blue-400 hover:bg-blue-50'
+            }`}>
+              <Upload className="w-10 h-10 opacity-50" />
+              <div className="text-center">
+                <p className="text-lg font-black text-gray-700">{sourceData.length > 0 ? 'File Loaded Successfully' : 'Select Combined Excel File'}</p>
+                <p className="text-xs font-bold tracking-widest mt-1 opacity-60">MUST CONTAIN: DATE, SESSION, SUBJECT, NAMES</p>
               </div>
-
-              <label className={`flex flex-col items-center justify-center gap-3 w-full p-8 border-2 border-dashed rounded-3xl cursor-pointer transition-all ${
-                sourceData.length > 0 ? 'bg-green-50 border-green-200 text-green-600' : 'bg-gray-50 border-gray-200 text-gray-400 hover:border-blue-400 hover:bg-blue-50'
-              }`}>
-                <Users className="w-8 h-8 opacity-50" />
-                <div className="text-center">
-                  <p className="text-sm font-black text-gray-700">{sourceData.length > 0 ? 'Student List Loaded' : 'Select Student Data'}</p>
-                  <p className="text-[10px] uppercase font-bold tracking-widest mt-1 opacity-60">Names, Enrollment, Teachers</p>
+              {sourceData.length > 0 && (
+                <div className="bg-white px-4 py-2 rounded-xl shadow-sm border border-green-100 text-xs font-black">
+                  {sourceData.length} total records found
                 </div>
-                {sourceData.length > 0 && <p className="text-xs font-bold mt-2">{sourceData.length} records found</p>}
-                <input type="file" className="hidden" accept=".xlsx, .xls" onChange={(e) => handleFileUpload(e, 'source')} />
-              </label>
-            </div>
+              )}
+              <input type="file" className="hidden" accept=".xlsx, .xls" onChange={handleFileUpload} />
+            </label>
           </div>
 
           <div className="p-6 bg-gray-50 rounded-3xl border border-gray-100 space-y-4">
@@ -262,31 +217,15 @@ export function AttendanceSheetGenerator({ onClose }: AttendanceSheetGeneratorPr
                   type="number" 
                   value={roomCapacity}
                   onChange={(e) => setRoomCapacity(parseInt(e.target.value) || 1)}
-                  className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-100 outline-none font-bold"
+                  className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-100 outline-none font-bold text-lg"
                 />
               </div>
-              <div className="hidden sm:block">
-                <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100">
-                  <p className="text-[10px] text-blue-700 font-bold uppercase tracking-widest">Logic Info</p>
-                  <p className="text-xs text-blue-900 font-medium mt-1">If session has 70 students and capacity is 30, system will create 3 sheets: Room 1 (30), Room 2 (30), Room 3 (10).</p>
-                </div>
+              <div className="flex-1 p-3 bg-blue-50 rounded-2xl border border-blue-100">
+                <p className="text-[10px] text-blue-700 font-bold uppercase tracking-widest">Logic Info</p>
+                <p className="text-xs text-blue-900 font-medium mt-1 leading-relaxed">Students will be grouped by Date & Session, then automatically split into rooms.</p>
               </div>
             </div>
           </div>
-
-          {datesheetData.length > 0 && sourceData.length > 0 && (
-            <div className="flex flex-col items-center justify-center py-4 space-y-4">
-              <div className="p-4 bg-green-50 border border-green-200 rounded-2xl flex items-center gap-3 w-full max-w-md">
-                <div className="p-2 bg-green-500 text-white rounded-lg">
-                   <Download className="w-5 h-5" />
-                </div>
-                <div>
-                  <p className="text-sm font-black text-gray-900">Ready to Generate</p>
-                  <p className="text-xs text-gray-500">Matching {sourceData.length} students with your schedule.</p>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Footer */}
@@ -298,10 +237,10 @@ export function AttendanceSheetGenerator({ onClose }: AttendanceSheetGeneratorPr
             Cancel
           </button>
           <button 
-            disabled={isProcessing || !datesheetData.length || !sourceData.length}
+            disabled={isProcessing || !sourceData.length}
             onClick={generateAttendanceSheets}
             className={`flex-[2] py-4 px-6 font-black rounded-2xl transition-all shadow-xl uppercase tracking-widest text-xs flex items-center justify-center gap-2 ${
-              isProcessing || !datesheetData.length || !sourceData.length
+              isProcessing || !sourceData.length
                 ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
                 : 'bg-blue-600 text-white hover:bg-blue-700 shadow-blue-200'
             }`}
