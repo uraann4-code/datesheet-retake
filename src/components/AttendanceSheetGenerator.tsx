@@ -26,7 +26,7 @@ export function AttendanceSheetGenerator({ onClose }: AttendanceSheetGeneratorPr
         const sheetName = workbook.SheetNames[0];
         
         const worksheet = workbook.Sheets[sheetName];
-        const jsonData = XLSX.utils.sheet_to_json(worksheet, { raw: false, dateNF: 'dd-mmm-yyyy' });
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, { raw: false, dateNF: 'dd-mm-yy' });
         
         if (jsonData.length === 0) {
           alert("The file seems empty.");
@@ -73,17 +73,58 @@ export function AttendanceSheetGenerator({ onClose }: AttendanceSheetGeneratorPr
       // Group students by Date and Session
       const sessions: Record<string, any[]> = {};
       sourceData.forEach(row => {
-        const dateRaw = String(row[dateKey] || "").trim();
-        const sessionRaw = String(row[sessionKey] || "").trim();
+        let dateRaw = String(row[dateKey] || "").trim();
+        let sessionRaw = String(row[sessionKey] || "").trim();
 
         if (!dateRaw || !sessionRaw) return;
 
-        const key = `${dateRaw}|${sessionRaw}`;
+        // Standardize Session: I -> I, II -> II, 1 -> I, 2 -> II
+        let displaySession = sessionRaw;
+        if (sessionRaw === '1' || sessionRaw.toLowerCase() === 'session 1') displaySession = 'I';
+        else if (sessionRaw === '2' || sessionRaw.toLowerCase() === 'session 2') displaySession = 'II';
+        else if (sessionRaw.toUpperCase() === 'I') displaySession = 'I';
+        else if (sessionRaw.toUpperCase() === 'II') displaySession = 'II';
+
+        const key = `${dateRaw}|${displaySession}`;
         if (!sessions[key]) sessions[key] = [];
-        sessions[key].push(row);
+        sessions[key].push({ ...row, _displaySession: displaySession, _displayDate: dateRaw });
       });
 
-      const sessionKeys = Object.keys(sessions).sort((a, b) => a.localeCompare(b));
+      const sessionKeys = Object.keys(sessions).sort((a, b) => {
+        const [dateStrA, sessionA] = a.split('|');
+        const [dateStrB, sessionB] = b.split('|');
+        
+        // Helper to parse DD-MM-YY or DD-MMM-YYYY
+        const parseDate = (s: string) => {
+          const parts = s.split(/[-/]/);
+          if (parts.length === 3) {
+            let day = parseInt(parts[0]);
+            let month: number | string = parts[1];
+            let year = parseInt(parts[2]);
+
+            // Handle Month Name (MMM)
+            const months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+            const monthIdx = months.indexOf(month.toLowerCase());
+            if (monthIdx !== -1) {
+              month = monthIdx + 1;
+            } else {
+              month = parseInt(month as string);
+            }
+
+            // Handle YY vs YYYY
+            if (year < 100) year += 2000;
+            
+            return new Date(year, (month as number) - 1, day).getTime();
+          }
+          return 0;
+        };
+
+        const timeA = parseDate(dateStrA);
+        const timeB = parseDate(dateStrB);
+
+        if (timeA !== timeB) return timeA - timeB;
+        return sessionA.localeCompare(sessionB);
+      });
       
       if (sessionKeys.length === 0) {
         throw new Error("No valid Date and Session columns found. Please ensure your file has 'Date' and 'Session' columns.");
@@ -94,8 +135,10 @@ export function AttendanceSheetGenerator({ onClose }: AttendanceSheetGeneratorPr
         let isFirstPage = true;
 
         for (const key of sessionKeys) {
-          const [date, session] = key.split('|');
           const sessionStudents = sessions[key];
+          const date = sessionStudents[0]._displayDate;
+          const session = sessionStudents[0]._displaySession;
+          
           const totalRooms = Math.ceil(sessionStudents.length / roomCapacity);
 
           for (let roomIdx = 0; roomIdx < totalRooms; roomIdx++) {
@@ -157,31 +200,48 @@ export function AttendanceSheetGenerator({ onClose }: AttendanceSheetGeneratorPr
         }
         pdf.save(`Attendance_Landscape_${new Date().getTime()}.pdf`);
       } else {
-        // EXCEL EXPORT
-        const combinedData: any[] = [];
+        // EXCEL EXPORT - Separate sheet for each date, session, and room
+        const wb = XLSX.utils.book_new();
+        
         sessionKeys.forEach(key => {
-          const [date, session] = key.split('|');
           const sessionStudents = sessions[key];
+          const date = sessionStudents[0]._displayDate;
+          const session = sessionStudents[0]._displaySession;
+          const totalRooms = Math.ceil(sessionStudents.length / roomCapacity);
 
-          sessionStudents.forEach((s, idx) => {
-            const roomNumber = Math.floor(idx / roomCapacity) + 1;
-            combinedData.push({
-              'Date': date,
-              'Session': session,
-              'Room #': roomNumber,
-              'S#': (idx + 1),
+          for (let roomIdx = 0; roomIdx < totalRooms; roomIdx++) {
+            const startIdx = roomIdx * roomCapacity;
+            const roomStudents = sessionStudents.slice(startIdx, startIdx + roomCapacity);
+            const roomNumber = roomIdx + 1;
+
+            const sheetData = roomStudents.map((s, idx) => ({
+              'S#': idx + 1,
               'Name': s[nameKey] || '',
               'Enrollment': s[enrolKey] || '',
               'Class': s[classKey] || '',
               'Subject': s[subKey] || '',
               'Teacher': s[teacherKey] || ''
-            });
-          });
+            }));
+
+            const ws = XLSX.utils.json_to_sheet(sheetData);
+            
+            // Excel sheet name limits: 31 chars, no \ / ? * [ ] :
+            let cleanDate = date.replace(/[\\/?*\[\]:]/g, '-');
+            let sheetName = `${cleanDate} S-${session} R${roomNumber}`.substring(0, 31).trim();
+            
+            // Ensure unique sheet name (just in case)
+            if (wb.SheetNames.includes(sheetName)) {
+               sheetName = (sheetName.substring(0, 27) + "_" + Math.random().toString(36).substring(2, 5)).toUpperCase();
+            }
+
+            XLSX.utils.book_append_sheet(wb, ws, sheetName);
+          }
         });
 
-        const ws = XLSX.utils.json_to_sheet(combinedData);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, 'AttendanceData');
+        if (wb.SheetNames.length === 0) {
+          throw new Error("No data found to export.");
+        }
+
         XLSX.writeFile(wb, `Attendance_Sheets_${new Date().getTime()}.xlsx`);
       }
       
