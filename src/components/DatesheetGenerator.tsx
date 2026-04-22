@@ -3,6 +3,7 @@ import { FileUpload } from './FileUpload';
 import { ConfigurationPanel } from './ConfigurationPanel';
 import { ResultsTable } from './ResultsTable';
 import { ApprovalPanel, ApprovableRecord } from './ApprovalPanel';
+import { DataTools } from './DataTools';
 import { generateSchedule, ScheduleResult, ExamType } from '../lib/scheduler';
 import { CalendarDays, Plus, ArrowLeft, CheckCircle2, Cloud, FileSpreadsheet, AlertTriangle, X } from 'lucide-react';
 import { createWorkspace, loadWorkspaceById, loadAllWorkspaces } from '../lib/db';
@@ -444,6 +445,8 @@ export function DatesheetGenerator({
                 </p>
               </div>
             </div>
+
+            {step === 'upload' && <DataTools />}
 
             <ConfigurationPanel
               startDate={startDate}

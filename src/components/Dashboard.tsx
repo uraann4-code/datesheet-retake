@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Plus, History, Calendar, FileText, ChevronRight, Clock, Trash2 } from 'lucide-react';
+import { DataTools } from './DataTools';
 import { loadAllWorkspaces, deleteWorkspace } from '../lib/db';
 import { format } from 'date-fns';
 
@@ -146,6 +147,8 @@ export function Dashboard({ onSelectWorkspace, onStartNew, onStartLate }: Dashbo
               </div>
             </div>
           </div>
+
+          <DataTools />
 
           <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm">
             <h3 className="font-bold text-gray-900 mb-4">How it works</h3>

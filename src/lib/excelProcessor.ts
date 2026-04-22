@@ -95,3 +95,52 @@ export function processExcelData(wb: XLSX.WorkBook, sheetName: string): any[] {
     return true;
   });
 }
+
+export function unmergeAndFill(wb: XLSX.WorkBook, sheetName: string): any[] {
+  const worksheet = wb.Sheets[sheetName];
+  if (!worksheet['!merges']) return XLSX.utils.sheet_to_json(worksheet);
+
+  // Deep copy worksheet to not modify original if needed, 
+  // but sheet_to_json usually doesn't mind if we modify the cells here
+  const merges = worksheet['!merges'];
+  merges.forEach(merge => {
+    const startCell = worksheet[XLSX.utils.encode_cell(merge.s)];
+    if (!startCell) return;
+    
+    const value = startCell.v;
+    for (let r = merge.s.r; r <= merge.e.r; r++) {
+      for (let c = merge.s.c; c <= merge.e.c; c++) {
+        const addr = XLSX.utils.encode_cell({ r, c });
+        if (!worksheet[addr]) {
+          worksheet[addr] = { v: value, t: startCell.t };
+        } else {
+          worksheet[addr].v = value;
+        }
+      }
+    }
+  });
+
+  return XLSX.utils.sheet_to_json(worksheet);
+}
+
+export function sortRecordsByRecommendation(data: any[]): any[] {
+  if (data.length === 0) return data;
+  
+  // Try to find a recommendation column
+  const keys = Object.keys(data[0]);
+  const recKey = keys.find(k => k.toLowerCase().match(/recommend|status|decision|result/));
+  
+  if (!recKey) return data;
+
+  return [...data].sort((a, b) => {
+    const valA = String(a[recKey] || "").toLowerCase();
+    const valB = String(b[recKey] || "").toLowerCase();
+    
+    const isARec = valA.includes("recommended") && !valA.includes("not");
+    const isBRec = valB.includes("recommended") && !valB.includes("not");
+    
+    if (isARec && !isBRec) return -1;
+    if (!isARec && isBRec) return 1;
+    return 0;
+  });
+}
