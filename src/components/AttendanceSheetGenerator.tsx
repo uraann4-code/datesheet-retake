@@ -33,6 +33,23 @@ export function AttendanceSheetGenerator({ onClose }: AttendanceSheetGeneratorPr
           
           if (rawData.length === 0) return;
 
+          // Attempt to extract Date and Session from metadata rows (usually line 3)
+          let sheetDate = "";
+          let sheetSession = "";
+          const metaSearchArea = rawData.slice(0, 5);
+          metaSearchArea.forEach(rowArr => {
+            if (!rowArr) return;
+            rowArr.forEach(cell => {
+              const cellStr = String(cell);
+              if (cellStr.toLowerCase().includes('dated:')) {
+                sheetDate = cellStr.split(/dated:/i)[1]?.split(',')[0]?.trim() || "";
+              }
+              if (cellStr.toLowerCase().includes('session -')) {
+                sheetSession = cellStr.split(/session -/i)[1]?.split(',')[0]?.trim() || "";
+              }
+            });
+          });
+
           // Find the header row (the one containing S# or Name or Enrollment or Subject)
           let headerRowIndex = -1;
           for (let i = 0; i < Math.min(rawData.length, 15); i++) {
@@ -42,8 +59,7 @@ export function AttendanceSheetGenerator({ onClose }: AttendanceSheetGeneratorPr
               return cellStr.includes('s#') || 
                      cellStr.includes('name') || 
                      cellStr.includes('enrollment') || 
-                     cellStr.includes('subject') ||
-                     cellStr.includes('course');
+                     cellStr.includes('subject');
             })) {
               headerRowIndex = i;
               break;
@@ -56,10 +72,20 @@ export function AttendanceSheetGenerator({ onClose }: AttendanceSheetGeneratorPr
             const sheetJson = rows.map(row => {
               const obj: any = {};
               headers.forEach((h, idx) => {
-                if (h) obj[String(h)] = row[idx];
+                if (h) {
+                  const cleanHeader = String(h).trim().toUpperCase();
+                  obj[cleanHeader] = row[idx];
+                }
               });
+              
+              // If date/session are missing from row data, use header metadata
+              const dKey = Object.keys(obj).find(k => k.includes('DATE')) || 'DATE';
+              const sKey = Object.keys(obj).find(k => k.includes('SESSION')) || 'SESSION';
+              if (!obj[dKey] && sheetDate) obj[dKey] = sheetDate;
+              if (!obj[sKey] && sheetSession) obj[sKey] = sheetSession;
+              
               return obj;
-            }).filter(row => row['NAME'] || row['Name'] || row['S#'] || row['Enrollment']); // Filter empty rows
+            }).filter(row => row['NAME'] || row['Name'] || row['ENROLLMENT NO'] || row['Enrollment']);
 
             allData = [...allData, ...sheetJson];
           } else {
@@ -134,9 +160,14 @@ export function AttendanceSheetGenerator({ onClose }: AttendanceSheetGeneratorPr
       // Sort students in each session by Subject to group them in rooms
       Object.keys(sessions).forEach(key => {
         sessions[key].sort((a, b) => {
-          const subA = String(a[subKey] || "").toLowerCase();
-          const subB = String(b[subKey] || "").toLowerCase();
-          return subA.localeCompare(subB);
+          const subA = String(a[subKey] || "").trim().toLowerCase();
+          const subB = String(b[subKey] || "").trim().toLowerCase();
+          if (subA !== subB) return subA.localeCompare(subB);
+          
+          // Secondary sort: Enrollment
+          const enA = String(a[enrolKey] || "").toLowerCase();
+          const enB = String(b[enrolKey] || "").toLowerCase();
+          return enA.localeCompare(enB);
         });
       });
 
@@ -144,35 +175,23 @@ export function AttendanceSheetGenerator({ onClose }: AttendanceSheetGeneratorPr
         const [dateStrA, sessionA] = a.split('|');
         const [dateStrB, sessionB] = b.split('|');
         
-        // Helper to parse DD-MM-YY or DD-MMM-YYYY
         const parseDate = (s: string) => {
           const parts = s.split(/[-/]/);
           if (parts.length === 3) {
-            let day = parseInt(parts[0]);
-            let month: number | string = parts[1];
-            let year = parseInt(parts[2]);
-
-            // Handle Month Name (MMM)
-            const months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
-            const monthIdx = months.indexOf(month.toLowerCase());
-            if (monthIdx !== -1) {
-              month = monthIdx + 1;
-            } else {
-              month = parseInt(month as string);
-            }
-
-            // Handle YY vs YYYY
-            if (year < 100) year += 2000;
-            
-            return new Date(year, (month as number) - 1, day).getTime();
+            const d = parseInt(parts[0]);
+            const m = parseInt(parts[1]);
+            let y = parseInt(parts[2]);
+            if (y < 100) y += 2000;
+            return new Date(y, m - 1, d).getTime();
           }
           return 0;
         };
 
-        const timeA = parseDate(dateStrA);
-        const timeB = parseDate(dateStrB);
+        const tA = parseDate(dateStrA);
+        const tB = parseDate(dateStrB);
 
-        if (timeA !== timeB) return timeA - timeB;
+        if (tA !== tB) return tA - tB;
+        // Session I before II
         return sessionA.localeCompare(sessionB);
       });
       
@@ -264,10 +283,6 @@ export function AttendanceSheetGenerator({ onClose }: AttendanceSheetGeneratorPr
             const roomStudents = sessionStudents.slice(startIdx, startIdx + roomCapacity);
             const roomNumber = roomIdx + 1;
 
-            // BAHRIA UNIVERSITY - ISLAMABAD CAMPUS,,,,,,,
-            // ATTENDANCE-SHEET - RE-TAKE MID TERM SPRING-2026 SEMESTER,,,,,,,
-            // ,,ROOM # ,,Dated:             Session - I,,,
-            // S#,NAME,ENROLLMENT NO,CLASS,SUBJECT,TEACHER NAME,SHEET #,SIGN
             const aoa = [
               ['BAHRIA UNIVERSITY - ISLAMABAD CAMPUS', '', '', '', '', '', '', ''],
               ['ATTENDANCE-SHEET - RE-TAKE MID TERM SPRING-2026 SEMESTER', '', '', '', '', '', '', ''],
