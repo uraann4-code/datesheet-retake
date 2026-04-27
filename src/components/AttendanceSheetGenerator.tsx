@@ -23,16 +23,57 @@ export function AttendanceSheetGenerator({ onClose }: AttendanceSheetGeneratorPr
       try {
         const binary = new Uint8Array(event.target?.result as ArrayBuffer);
         const workbook = XLSX.read(binary, { type: 'array', cellDates: true });
-        const sheetName = workbook.SheetNames[0];
         
-        const worksheet = workbook.Sheets[sheetName];
-        const jsonData = XLSX.utils.sheet_to_json(worksheet, { raw: false, dateNF: 'dd-mm-yy' });
+        let allData: any[] = [];
         
-        if (jsonData.length === 0) {
-          alert("The file seems empty.");
+        // Process all sheets in case it's a multi-sheet export being "fixed"
+        workbook.SheetNames.forEach(sheetName => {
+          const worksheet = workbook.Sheets[sheetName];
+          const rawData = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: false, dateNF: 'dd-mm-yy' }) as any[][];
+          
+          if (rawData.length === 0) return;
+
+          // Find the header row (the one containing S# or Name or Enrollment or Subject)
+          let headerRowIndex = -1;
+          for (let i = 0; i < Math.min(rawData.length, 15); i++) {
+            const row = rawData[i];
+            if (row && row.some(cell => {
+              const cellStr = String(cell).toLowerCase();
+              return cellStr.includes('s#') || 
+                     cellStr.includes('name') || 
+                     cellStr.includes('enrollment') || 
+                     cellStr.includes('subject') ||
+                     cellStr.includes('course');
+            })) {
+              headerRowIndex = i;
+              break;
+            }
+          }
+
+          if (headerRowIndex !== -1) {
+            const headers = rawData[headerRowIndex];
+            const rows = rawData.slice(headerRowIndex + 1);
+            const sheetJson = rows.map(row => {
+              const obj: any = {};
+              headers.forEach((h, idx) => {
+                if (h) obj[String(h)] = row[idx];
+              });
+              return obj;
+            }).filter(row => row['NAME'] || row['Name'] || row['S#'] || row['Enrollment']); // Filter empty rows
+
+            allData = [...allData, ...sheetJson];
+          } else {
+            // Fallback to standard parsing if no clear header found
+            const fallback = XLSX.utils.sheet_to_json(worksheet, { raw: false, dateNF: 'dd-mm-yy' });
+            allData = [...allData, ...fallback];
+          }
+        });
+        
+        if (allData.length === 0) {
+          alert("The file seems empty or headers not found.");
           return;
         }
-        setSourceData(jsonData);
+        setSourceData(allData);
       } catch (err) {
         console.error(err);
         alert("Failed to process file. Please ensure it is a valid Excel file.");
@@ -88,6 +129,15 @@ export function AttendanceSheetGenerator({ onClose }: AttendanceSheetGeneratorPr
         const key = `${dateRaw}|${displaySession}`;
         if (!sessions[key]) sessions[key] = [];
         sessions[key].push({ ...row, _displaySession: displaySession, _displayDate: dateRaw });
+      });
+
+      // Sort students in each session by Subject to group them in rooms
+      Object.keys(sessions).forEach(key => {
+        sessions[key].sort((a, b) => {
+          const subA = String(a[subKey] || "").toLowerCase();
+          const subB = String(b[subKey] || "").toLowerCase();
+          return subA.localeCompare(subB);
+        });
       });
 
       const sessionKeys = Object.keys(sessions).sort((a, b) => {
@@ -314,8 +364,8 @@ export function AttendanceSheetGenerator({ onClose }: AttendanceSheetGeneratorPr
             }`}>
               <Upload className="w-10 h-10 opacity-50" />
               <div className="text-center">
-                <p className="text-lg font-black text-gray-700">{sourceData.length > 0 ? 'File Loaded ' : 'Select Combined Excel File'}</p>
-                <p className="text-xs font-bold tracking-widest mt-1 opacity-60 uppercase">Must contain: Date, Session, Subject, Students Name</p>
+                <p className="text-lg font-black text-gray-700">{sourceData.length > 0 ? 'File Loaded ' : 'Select Data or Existing Sheet'}</p>
+                <p className="text-xs font-bold tracking-widest mt-1 opacity-60 uppercase">Fix & Re-sort existing sheets or upload new data</p>
               </div>
               {sourceData.length > 0 && (
                 <div className="bg-white px-4 py-2 rounded-xl shadow-sm border border-green-100 text-xs font-black">
